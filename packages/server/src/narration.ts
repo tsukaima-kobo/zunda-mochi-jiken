@@ -1,0 +1,61 @@
+// 試合の場面の中で、案内役が言う一言（記録にある事実だけ）。
+
+import type { MatchLog } from './match-core.ts';
+
+/** 案内役の名前（画面の帯の札に出す）。 */
+export const NARRATOR = '案内役';
+
+const join = (names: readonly string[]) => names.join('と');
+
+/**
+ * 試合の場面の中で、案内役が言う一言（記録の事実だけ）。上映の時間軸に置き、
+ * secret の一言は、役職を明かす（妖精がねらっている、など）。役職を見せている時だけ鳴らす。
+ * event は log.events の何番目の出来事に付けるか、delay はその出来事から何秒あとに言いたいか。
+ */
+export interface Callout {
+  key: string;
+  text: string;
+  event: number;
+  delay: number;
+  secret: boolean;
+  /** 見回りの中の一言か（集会・試合の終わりの一言は false）。 */
+  roam: boolean;
+}
+
+const SIDE_NAME: Record<string, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', fox: '狐' };
+
+export function calloutsOf(log: MatchLog): Callout[] {
+  const out: Callout[] = [];
+  const roam = (key: string, text: string, event: number, delay: number, secret: boolean) => out.push({ key, text, event, delay, secret, roam: true });
+  const meet = (key: string, text: string, event: number, delay: number) => out.push({ key, text, event, delay, secret: false, roam: false });
+  const voted = new Set<number>();
+  log.events.forEach((event, i) => {
+    // 「〇〇をねらっている」「あとをつけている」は、画面に内心が出ていない時に意味が分からないので言わない
+    if (event.type === 'nap') {
+      const saw = event.witnesses.filter((w) => w.sawWho).map((w) => w.name);
+      const tail = saw.length > 0 ? `しかも、${join(saw.slice(0, 2))}に見られていた！` : '';
+      roam(`nap:${i}`, `${event.target}が、ずんだ餅にされちゃった！${tail}`, i, 0.45, false);
+    } else if (event.type === 'sabotage') {
+      // 画面に大きな知らせが出る妨害だけ。戸・直した・抜け道は、画面の表示に任せる
+      if (event.what === 'lights') roam(`sab:${i}`, `${event.by}が、あかりを消した！`, i, 0.3, true);
+      else if (event.what === 'crisis') roam(`sab:${i}`, `${event.by}が、かまどを焚きすぎにした！`, i, 0.3, true);
+    } else if (event.type === 'meeting_start') {
+      // 誰が何を見つけたかは画面の上の札に出るので、声は短く
+      const text = event.kind === 'report' ? '見つかった！集会だよ！' : '鐘が鳴った！集会だよ！';
+      meet(`call:${event.meeting}`, text, i, 0.35);
+    } else if (event.type === 'vote') {
+      if (voted.has(event.meeting)) return;
+      voted.add(event.meeting);
+      meet(`vote:${event.meeting}`, '投票の時間！みんな、誰に入れる……？', i, 0.1);
+    } else if (event.type === 'meeting_end') {
+      // 票の数と、妖精だったかどうかは画面の札に出るので、声では読み上げない。開票の間を無音にしないよう、ひと声だけ
+      if (event.tally.some((t) => t.target !== '' && t.count > 0)) meet(`tally:${event.meeting}`, '開票……！', i, 0.3);
+      const verdict = event.ejected ? `${event.ejected}は、クビ！` : '今回は、誰もクビにならなかった。';
+      meet(`verdict:${event.meeting}`, verdict, i, 0.25);
+    } else if (event.type === 'game_over') {
+      const fox = log.players.filter((p) => p.role === 'fox').map((p) => p.name);
+      meet('end', event.stolenFrom ? `試合終了！……でも、狐の${join(fox)}が起きている！横取りだ！` : `試合終了！${SIDE_NAME[event.winner] ?? event.winner}の勝ち！`, i, 0.4);
+    }
+  });
+  return out;
+}

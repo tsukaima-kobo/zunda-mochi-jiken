@@ -1,0 +1,29 @@
+{
+  "name": "zunda-mochi-jiken",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ずんだ餅工房のもちもち事件 — 11人が工房で働きながら、まぎれこんだ「ずんだの妖精」を探す正体隠しゲーム（ボット版・ブラウザで動く）",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite --config packages/viewer/vite.config.ts",
+    "build": "vite build --config packages/viewer/vite.config.ts",
+    "preview": "vite preview --config packages/viewer/vite.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p packages/viewer/tsconfig.json",
+    "bots": "node tools/run-bots.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "fast-check": "4.10.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  }
+}

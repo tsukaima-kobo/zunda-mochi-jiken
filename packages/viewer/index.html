@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ずんだ餅工房のもちもち事件</title>
+    <meta name="description" content="11人が工房で働きながら、まぎれこんだ「ずんだの妖精」を探す正体隠しゲーム。ブラウザの中でボットが遊ぶ試合を観戦できます。" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main id="frame" class="frame">
+      <canvas id="canvas" width="1920" height="1080"></canvas>
+    </main>
+    <footer class="controls">
+      <button id="play" type="button">再生</button>
+      <span id="clock" class="clock">0:00</span>
+      <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="再生位置" />
+      <label>速さ
+        <select id="speed">
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+          <option value="8">8×</option>
+        </select>
+      </label>
+      <label><input id="secrets" type="checkbox" checked /> 役職と内心</label>
+      <label><input id="overview" type="checkbox" /> 全体を映す</label>
+      <label><input id="sound" type="checkbox" checked /> 音</label>
+      <label>種 <input id="seed" type="number" min="1" step="1" inputmode="numeric" aria-label="試合の種" /></label>
+      <button id="again" type="button">この種で</button>
+      <button id="fresh" type="button">新しい試合</button>
+      <button id="help-open" type="button" aria-haspopup="dialog">遊び方</button>
+      <span id="note" class="note"></span>
+    </footer>
+    <dialog id="help" class="help">
+      <h2>ずんだ餅工房のもちもち事件</h2>
+      <p>開店前のずんだ餅工房。11人の従業員の中に、<b>ずんだの妖精</b>がまぎれこんでいます。画面の中の11人は、すべてボット（台本どおりに動くプログラム）です。あなたは観戦するだけです。</p>
+      <h3>役わりと勝ち方</h3>
+      <ul>
+        <li><b>従業員</b>: 持ち場をまわって仕込みを進めます。仕込みを全部終えるか、妖精を全員クビにすれば勝ち。</li>
+        <li><b>ずんだの妖精</b>: すぐそばの人に手をかざして、ずんだ餅に変えてしまいます。起きている人間を妖精と同じ数まで減らせば勝ち。あかりを消す・かまどを焚きすぎにするなどの妨害もします。床下の抜け道も通れます。</li>
+        <li>ずんだ餅になった人は、心だけになって、こっそり仕込みを続けます。</li>
+      </ul>
+      <h3>集会と投票</h3>
+      <p>ずんだ餅を見つけた人が知らせるか、中庭の鐘が鳴ると、集会が始まります。話し合いのあと全員で投票し、いちばん票を集めた人をクビにします。</p>
+      <h3>見える範囲</h3>
+      <p>それぞれが知っているのは、自分で見たこと・聞いたことだけです。「役職と内心」を外すと、登場人物と同じく、誰が妖精か分からないまま観られます。</p>
+      <h3>操作</h3>
+      <p>スペース: 再生／一時停止　← →: 5秒もどる／進む　S: 役職と内心　M: 全体を映す　H: 操作の帯を隠す</p>
+      <p>同じ「種」なら、何度でも同じ試合になります。URL の <code>?seed=</code> で共有できます。</p>
+      <form method="dialog"><button type="submit">閉じる</button></form>
+    </dialog>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

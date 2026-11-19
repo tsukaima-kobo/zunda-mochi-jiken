@@ -1,0 +1,27 @@
+/* 上映画面は canvas に描く（横 1920 × 縦 1080 の比率）。ここにあるのは、枠と操作の帯と、遊び方の窓だけ。 */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; flex-direction: column;
+  background: #1c140d; color: #f3e8cf;
+  font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; font-size: 14px;
+}
+.frame { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+canvas { display: block; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 14px; background: #2b1f15; border-top: 1px solid #4a3524; white-space: nowrap; }
+.controls input[type="range"] { flex: 1; min-width: 120px; accent-color: #9ccc52; }
+.clock { font-variant-numeric: tabular-nums; min-width: 6.5em; }
+.note { color: #b8a58a; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+button, select, input[type="number"] { font: inherit; padding: 4px 12px; border-radius: 6px; border: 1px solid #5e4a36; background: #3a2a1c; color: inherit; cursor: pointer; }
+/* 録画用: 操作の帯を隠す（H キーでも切り替えられる） */
+body.clean .controls { display: none; }
+body.clean { cursor: none; }
+.controls input[type="number"] { width: 6.5em; padding: 4px 8px; cursor: text; }
+/* 遊び方の窓 */
+.help { max-width: 640px; width: calc(100% - 32px); border: 2px solid #5e4a36; border-radius: 14px; background: #fbf3e0; color: #3b2a1e; padding: 20px 24px; line-height: 1.7; }
+.help::backdrop { background: rgba(20, 12, 6, 0.6); }
+.help h2 { margin: 0 0 8px; font-size: 22px; }
+.help h3 { margin: 16px 0 4px; font-size: 16px; }
+.help ul { margin: 4px 0; padding-left: 1.4em; }
+.help code { background: #efe2c4; padding: 0 4px; border-radius: 4px; }
+.help button { background: #3a2a1c; color: #f3e8cf; }

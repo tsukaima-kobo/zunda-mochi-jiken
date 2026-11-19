@@ -1,0 +1,1807 @@
+{
+  "name": "ずんだ餅工房",
+  "corridor": "通路",
+  "rooms": {
+    "F": "枝豆畑",
+    "A": "洗い場",
+    "M": "蒸し場",
+    "K": "機械室",
+    "Q": "休憩室",
+    "D": "道具部屋",
+    "S": "倉庫",
+    "I": "氷室",
+    "U": "餅つき場",
+    "B": "あんこ場",
+    "C": "中庭",
+    "Z": "ずんだ場",
+    "P": "包み場",
+    "T": "帳場",
+    "V": "店先",
+    "Y": "座敷"
+  },
+  "halls": {
+    "n": "北の廊下",
+    "s": "南の廊下",
+    "w": "西の廊下",
+    "e": "東の廊下"
+  },
+  "rows": [
+    "########################################################################",
+    "#FFFFFFFFFFFFFFFFFFFF#AAAAAAAAAAAAAAA#M%MMMMMMMMMMMMMMMMM#eee#KK%KK%%%K#",
+    "#FFFFFFFFFFFFFFFFFF%F#AAAAAAAAAAAAA%A#MMMMMMMMMMMMMMMMMMM#eee#KKKKK%%%K#",
+    "#FF%%%%%%%FF%%%%%%%FF#AAAAA%%%%%AAAAA#MMMMMM%%%%%%MMMMMMM#eee#KKKKKKKKK#",
+    "#FFFFFFFFFFFFFFFFFFFF#AAAAA%%%%%AAAAAMMMMMMM%%%%%%MMMMMMMeeeeeKKKKKKKKK#",
+    "#FF%%%%%%%FF%%%%%%%FF#AAAAAAAAAAAAAAAMMMMMMMMMMMMMMMMMMMMeeeeeKKKKKKKKK#",
+    "#FFFFFFFFFFFFFFFFFFFF#AAAAAAAAAAAAAAA#MMMMMMMMMMMMMM%%%MM#eee#KKKKK%%%K#",
+    "#FF%%%%%%%FF%%%%%%%FF#A%AAAAAAAAAAAAA#M%%%MMMMMMMMMMMMMMM#eee#KKKKK%%%K#",
+    "#FFFFFFFFFFFFFFFFFFFF#AAAAAAAAAAAAAAA#MMMMMMMMMMMMMMMMMMM#eee#KKKKKKKKK#",
+    "#FFFFFFFFFFFFFFFFFFFF#######nn################nn##########eee###########",
+    "#F%FFFFFFFFFFFFFFFFFFnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnneee#QQQQQQQQQ#",
+    "#FFFFFFFFFFFFFFFFFFFFnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnneee#QQQQQQQQQ#",
+    "#FFFFFFFFFFFFFFFFFFFFnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnneee#QQQQQQQQQ#",
+    "##############www#####nn############nnn###################eee#QQQQQQQQQ#",
+    "#SSSSSSSSSS%S#www#UUUUUUUUUUU#CCCCCCCCCCCCCCC#ZZZZZZZZZZZ#eee#QQQ%%%QQQ#",
+    "#SSSSSSSSSSSS#www#UUUUUUU%%UU#CCCCCCCCCCC%%CC#ZZZZZZZZZZZ#eeeeQQQ%%%QQQ#",
+    "#SS%%%SS%%%SS#www#UUUUUUU%%UU#CC%CCCCCCCC%%CC#ZZZZZZZZZZZ#eeeeQQQQQQQQQ#",
+    "#SS%%%SS%%%SS#wwwwUUUUUUUUUUUCCCCCCCCCCCCCCCCCZZZ%%%%%ZZZeeee#QQQQQQQQQ#",
+    "#SSSSSSSSSSSSwwwwwUUUUUUUUUUUCCCCCCCCCCCCCCCCCZZZ%%%%%ZZZeeee#QQQQQQQQQ#",
+    "#SSSSSSSSSSSSwwww#UU%%UUUUUUU#CCCCCCCCCCCCCCC#ZZZZZZZZZZZ#eee#QQQQQQQ%%#",
+    "#SSSSSSSSSSSS#www#UU%%UUUUUUU#CCCCCCCCCCCCCCC#Z%%ZZZZZZZZ#eee#QQQQQQQ%%#",
+    "#SS%%%SS%%SSS#www#UUUUUUU%%%U#CCCCCC%%%CCCCCC#Z%%ZZZZZZZZ#eee#QQQQQQQQQ#",
+    "#SS%%%SS%%SSS#www#UUUUUUUUUUU#CCCCCC%%%CCC%CC#ZZZZZZZZZZZ#eee###########",
+    "#SSSSSSSSSSSS#www#############CCCCCCCCCCCCCCC#############eee#DDDDDDDDD#",
+    "#SSSSSSSSSSSS#www#BBBBBBBBBBB#CCCCCCCCCCCCCCC#PPPPPPPP%%P#eee#DDDDDDDDD#",
+    "##############www#B%%%%BBBBBB#CC%%CCCCCCCCCCC#PPPPPPPP%%P#eee#DDD%%%%DD#",
+    "#IIIIIIIIIIII#www#BBBBBBBBBBB#CC%%CCCCCCCCCCC#PP%%%%PPPPP#eee#DDDDDDDDD#",
+    "#IIIIIIIIIIII#www#BBBBBBBBBBBCCCCCCCCCCC%%%CC#PPPPPP%%%%Peeee#DDDDDDDDD#",
+    "#II%%II%%IIII#www#BBBBBB%%%BBCCCCCCCCCCC%%%CC#PPPPPPPPPPPeeeeeDDDDDDD%D#",
+    "#II%%II%%IIIIwwww#BBBBBBBBBBB#CCCCCCCCCCCCCCC#PPPPPPPPPPP#eeeeDDDDDDDDD#",
+    "#IIIIIIIIIIIIwwww#BBBBBBBBBBB#CCCCCCCCCCCCCCC#PPPPPPPPPPP#eee#DDDDDDDDD#",
+    "#IIIIIIIIIIII#www#####ss############sss###########ss######eee#DDD%%%%DD#",
+    "#II%%II%%IIII#wwwssssssssssssssssssssssssssssssssssssssssseee#DDDDDDDDD#",
+    "#II%%II%%IIII#wwwssssssssssssssssssssssssssssssssssssssssseee#D%%DDDDDD#",
+    "#IIIIIIIIIIII#wwwssssssssssssssssssssssssssssssssssssssssseee#D%%DDDDDD#",
+    "##############www#########ss############ss#################ee###########",
+    "#T%%%TTTTTTTT#www#V%VVVVVVVVVVVVVVVVVVVVVVVVVVV%V#YYYYYYYYYYYYYYYYYYYYY#",
+    "#TTTTTTTTTTTT#www#VVV%%%VVVVVVVVVVVVVVVVVVV%%%VVV#YYYYYYYYYYYYYYYYYYYYY#",
+    "#TTTTTTTTTTTT#www#VVV%%%VVVVVVVVVVVVVVVVVVV%%%VVV#YYYYYYYYYYYYYYYYYYYYY#",
+    "#TTTT%%%TTTTT#www#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#YYYY%%%YYYYYYY%%%YYYY#",
+    "#TTTTTTTTTTTTwwwwwVVVVVVVVVVV%%%%%%%%%VVVVVVVVVVVVYYYY%%%YYYYYYY%%%YYYY#",
+    "#TTTTTTTTTTTTwwwwwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVYYYYYYYYYYYYYYYYYYYYY#",
+    "#TTTTTTTTTTTT#www#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#YYYYYYYYYYYYYYYYYYYYY#",
+    "#TTTTTTTTTTTT#www#VVVV%%%V%VVVVVVVVVVVV%VV%%%VVVV#YYYYYYYYYYYYYYYYYYYYY#",
+    "#TTTTTTTTTTTT#www#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#YYYYYYYYYYYYYYYYYYYYY#",
+    "########################################################################"
+  ],
+  "spawn": [
+    [
+      35,
+      19
+    ],
+    [
+      37,
+      19
+    ],
+    [
+      39,
+      19
+    ],
+    [
+      34,
+      21
+    ],
+    [
+      40,
+      21
+    ],
+    [
+      34,
+      23
+    ],
+    [
+      40,
+      23
+    ],
+    [
+      35,
+      24
+    ],
+    [
+      37,
+      24
+    ],
+    [
+      39,
+      24
+    ],
+    [
+      33,
+      22
+    ],
+    [
+      41,
+      20
+    ]
+  ],
+  "settings": {
+    "roamSeconds": 1800,
+    "deadline": 0,
+    "visionRadius": 11,
+    "lightsVision": 0.25,
+    "napCooldown": 25,
+    "longDuties": 2,
+    "shortDuties": 3,
+    "dutySteps": 14,
+    "speed": 5,
+    "dutyPace": 3
+  },
+  "stations": [
+    {
+      "id": "pick",
+      "name": "枝豆をもぐ",
+      "room": "枝豆畑",
+      "x": 8,
+      "y": 4
+    },
+    {
+      "id": "wash",
+      "name": "枝豆を洗う",
+      "room": "洗い場",
+      "x": 29,
+      "y": 5
+    },
+    {
+      "id": "steam",
+      "name": "せいろで蒸す",
+      "room": "蒸し場",
+      "x": 46,
+      "y": 5
+    },
+    {
+      "id": "feed",
+      "name": "かまどに薪をくべる",
+      "room": "蒸し場",
+      "x": 44,
+      "y": 5
+    },
+    {
+      "id": "cloth",
+      "name": "ふきんをたたむ",
+      "room": "蒸し場",
+      "x": 40,
+      "y": 6
+    },
+    {
+      "id": "stack",
+      "name": "せいろを重ねる",
+      "room": "蒸し場",
+      "x": 53,
+      "y": 5
+    },
+    {
+      "id": "motor",
+      "name": "発電機に油をさす",
+      "room": "機械室",
+      "x": 68,
+      "y": 3
+    },
+    {
+      "id": "fuse",
+      "name": "ヒューズを替える",
+      "room": "機械室",
+      "x": 64,
+      "y": 2
+    },
+    {
+      "id": "tea",
+      "name": "お茶をいれる",
+      "room": "休憩室",
+      "x": 66,
+      "y": 16
+    },
+    {
+      "id": "tools",
+      "name": "工具箱を取ってくる",
+      "room": "道具部屋",
+      "x": 66,
+      "y": 26
+    },
+    {
+      "id": "rice",
+      "name": "もち米を出す",
+      "room": "倉庫",
+      "x": 4,
+      "y": 18
+    },
+    {
+      "id": "sugar",
+      "name": "砂糖を量る",
+      "room": "倉庫",
+      "x": 10,
+      "y": 21
+    },
+    {
+      "id": "ice",
+      "name": "氷を切り出す",
+      "room": "氷室",
+      "x": 5,
+      "y": 29
+    },
+    {
+      "id": "pound",
+      "name": "餅をつく",
+      "room": "餅つき場",
+      "x": 22,
+      "y": 19
+    },
+    {
+      "id": "round",
+      "name": "餅を丸める",
+      "room": "餅つき場",
+      "x": 26,
+      "y": 20
+    },
+    {
+      "id": "anko",
+      "name": "あんを練る",
+      "room": "あんこ場",
+      "x": 20,
+      "y": 26
+    },
+    {
+      "id": "strain",
+      "name": "あんをこす",
+      "room": "あんこ場",
+      "x": 25,
+      "y": 27
+    },
+    {
+      "id": "well",
+      "name": "井戸で水をくむ",
+      "room": "中庭",
+      "x": 34,
+      "y": 25
+    },
+    {
+      "id": "mash",
+      "name": "枝豆をすりつぶす",
+      "room": "ずんだ場",
+      "x": 51,
+      "y": 19
+    },
+    {
+      "id": "mix",
+      "name": "ずんだあんを混ぜる",
+      "room": "ずんだ場",
+      "x": 51,
+      "y": 16
+    },
+    {
+      "id": "wrap",
+      "name": "餅を包む",
+      "room": "包み場",
+      "x": 49,
+      "y": 27
+    },
+    {
+      "id": "box",
+      "name": "箱に詰める",
+      "room": "包み場",
+      "x": 53,
+      "y": 24
+    },
+    {
+      "id": "belt",
+      "name": "ベルトコンベアーを直す",
+      "room": "包み場",
+      "x": 53,
+      "y": 28
+    },
+    {
+      "id": "wire1",
+      "name": "配線を直す",
+      "room": "倉庫",
+      "x": 11,
+      "y": 15
+    },
+    {
+      "id": "wire2",
+      "name": "配線を直す",
+      "room": "蒸し場",
+      "x": 39,
+      "y": 2
+    },
+    {
+      "id": "wire3",
+      "name": "配線を直す",
+      "room": "店先",
+      "x": 47,
+      "y": 37
+    },
+    {
+      "id": "card",
+      "name": "出勤カードを切る",
+      "room": "帳場",
+      "x": 3,
+      "y": 37
+    },
+    {
+      "id": "ledger",
+      "name": "帳簿をつける",
+      "room": "帳場",
+      "x": 6,
+      "y": 40
+    },
+    {
+      "id": "display",
+      "name": "陳列台に並べる",
+      "room": "店先",
+      "x": 22,
+      "y": 39
+    },
+    {
+      "id": "counter",
+      "name": "売り台をふく",
+      "room": "店先",
+      "x": 33,
+      "y": 41
+    },
+    {
+      "id": "noren",
+      "name": "のれんを出す",
+      "room": "店先",
+      "x": 33,
+      "y": 44
+    },
+    {
+      "id": "chair",
+      "name": "椅子を直す",
+      "room": "店先",
+      "x": 26,
+      "y": 42
+    },
+    {
+      "id": "sweep",
+      "name": "床を掃く",
+      "room": "店先",
+      "x": 19,
+      "y": 37
+    },
+    {
+      "id": "window",
+      "name": "窓をふく",
+      "room": "座敷",
+      "x": 68,
+      "y": 36
+    },
+    {
+      "id": "zabuton",
+      "name": "座ぶとんを並べる",
+      "room": "座敷",
+      "x": 57,
+      "y": 39
+    },
+    {
+      "id": "flower",
+      "name": "花をいける",
+      "room": "座敷",
+      "x": 65,
+      "y": 41
+    }
+  ],
+  "dutyGroups": [
+    {
+      "id": "mochi",
+      "name": "ずんだ餅づくり",
+      "share": 0.5
+    },
+    {
+      "id": "machine",
+      "name": "機械の修理",
+      "share": 0.3
+    },
+    {
+      "id": "shop",
+      "name": "開店の支度",
+      "share": 0.2
+    }
+  ],
+  "duties": [
+    {
+      "name": "出勤カードを切る",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "card",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "ずんだあんづくり",
+      "kind": "long",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "pick",
+          "seconds": 4
+        },
+        {
+          "station": "wash",
+          "seconds": 4
+        },
+        {
+          "station": "steam",
+          "seconds": 5
+        },
+        {
+          "station": "mash",
+          "seconds": 5
+        }
+      ]
+    },
+    {
+      "name": "餅つき",
+      "kind": "long",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "rice",
+          "seconds": 3
+        },
+        {
+          "station": "steam",
+          "seconds": 5
+        },
+        {
+          "station": "pound",
+          "seconds": 6
+        }
+      ]
+    },
+    {
+      "name": "あんこ炊き",
+      "kind": "long",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "sugar",
+          "seconds": 3
+        },
+        {
+          "station": "anko",
+          "seconds": 6
+        },
+        {
+          "station": "strain",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "冷やしずんだ",
+      "kind": "long",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "ice",
+          "seconds": 4
+        },
+        {
+          "station": "well",
+          "seconds": 3
+        },
+        {
+          "station": "mix",
+          "seconds": 5
+        }
+      ]
+    },
+    {
+      "name": "餅を丸める",
+      "kind": "short",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "round",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "餅を包む",
+      "kind": "short",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "wrap",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "箱に詰める",
+      "kind": "short",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "box",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "ふきんをたたむ",
+      "kind": "short",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "cloth",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "せいろを重ねる",
+      "kind": "short",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "stack",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "かまどに薪をくべる",
+      "kind": "short",
+      "group": "mochi",
+      "steps": [
+        {
+          "station": "feed",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "ベルトコンベアーの修理",
+      "kind": "long",
+      "group": "machine",
+      "steps": [
+        {
+          "station": "tools",
+          "seconds": 3
+        },
+        {
+          "station": "belt",
+          "seconds": 6
+        }
+      ]
+    },
+    {
+      "name": "配線の修理",
+      "kind": "long",
+      "group": "machine",
+      "steps": [
+        {
+          "station": "wire1",
+          "seconds": 4
+        },
+        {
+          "station": "wire2",
+          "seconds": 4
+        },
+        {
+          "station": "wire3",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "発電機に油をさす",
+      "kind": "short",
+      "group": "machine",
+      "steps": [
+        {
+          "station": "motor",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "ヒューズを替える",
+      "kind": "short",
+      "group": "machine",
+      "steps": [
+        {
+          "station": "fuse",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "椅子を直す",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "chair",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "床を掃く",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "sweep",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "窓をふく",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "window",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "売り台をふく",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "counter",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "のれんを出す",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "noren",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "陳列台に並べる",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "display",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "帳簿をつける",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "ledger",
+          "seconds": 4
+        }
+      ]
+    },
+    {
+      "name": "座ぶとんを並べる",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "zabuton",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "花をいける",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "flower",
+          "seconds": 3
+        }
+      ]
+    },
+    {
+      "name": "お茶をいれる",
+      "kind": "short",
+      "group": "shop",
+      "steps": [
+        {
+          "station": "tea",
+          "seconds": 3
+        }
+      ]
+    }
+  ],
+  "fixPoints": [
+    {
+      "id": "breaker",
+      "name": "ブレーカー",
+      "room": "道具部屋",
+      "x": 68,
+      "y": 28,
+      "for": "lights"
+    },
+    {
+      "id": "stove",
+      "name": "かまどの火",
+      "room": "蒸し場",
+      "x": 48,
+      "y": 5,
+      "for": "crisis"
+    },
+    {
+      "id": "wellwater",
+      "name": "井戸の水",
+      "room": "中庭",
+      "x": 34,
+      "y": 26,
+      "for": "crisis"
+    }
+  ],
+  "hatches": [
+    {
+      "id": "h-souko",
+      "room": "倉庫",
+      "x": 11,
+      "y": 23,
+      "group": "西"
+    },
+    {
+      "id": "h-himuro",
+      "room": "氷室",
+      "x": 11,
+      "y": 27,
+      "group": "西"
+    },
+    {
+      "id": "h-chouba",
+      "room": "帳場",
+      "x": 11,
+      "y": 37,
+      "group": "西"
+    },
+    {
+      "id": "h-maki",
+      "room": "機械室",
+      "x": 63,
+      "y": 4,
+      "group": "東"
+    },
+    {
+      "id": "h-kyukei",
+      "room": "休憩室",
+      "x": 63,
+      "y": 20,
+      "group": "東"
+    },
+    {
+      "id": "h-dougu",
+      "room": "道具部屋",
+      "x": 63,
+      "y": 24,
+      "group": "東"
+    },
+    {
+      "id": "h-arai",
+      "room": "洗い場",
+      "x": 23,
+      "y": 2,
+      "group": "北"
+    },
+    {
+      "id": "h-mushi",
+      "room": "蒸し場",
+      "x": 55,
+      "y": 2,
+      "group": "北"
+    },
+    {
+      "id": "h-zunda",
+      "room": "ずんだ場",
+      "x": 55,
+      "y": 21,
+      "group": "北"
+    },
+    {
+      "id": "h-anko",
+      "room": "あんこ場",
+      "x": 27,
+      "y": 30,
+      "group": "南"
+    },
+    {
+      "id": "h-mise",
+      "room": "店先",
+      "x": 19,
+      "y": 44,
+      "group": "南"
+    },
+    {
+      "id": "h-tsutsumi",
+      "room": "包み場",
+      "x": 47,
+      "y": 30,
+      "group": "南"
+    }
+  ],
+  "bell": {
+    "x": 37,
+    "y": 23
+  },
+  "doors": [
+    {
+      "x": 28,
+      "y": 9,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 46,
+      "y": 9,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 37,
+      "y": 4,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 57,
+      "y": 4,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 61,
+      "y": 4,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 61,
+      "y": 15,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 61,
+      "y": 28,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 13,
+      "y": 18,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 13,
+      "y": 29,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 13,
+      "y": 40,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 17,
+      "y": 17,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 22,
+      "y": 13,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 29,
+      "y": 17,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 22,
+      "y": 31,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 29,
+      "y": 27,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 36,
+      "y": 13,
+      "w": 3,
+      "h": 1
+    },
+    {
+      "x": 36,
+      "y": 31,
+      "w": 3,
+      "h": 1
+    },
+    {
+      "x": 45,
+      "y": 17,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 57,
+      "y": 17,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 50,
+      "y": 31,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 57,
+      "y": 27,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 17,
+      "y": 40,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 26,
+      "y": 35,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 40,
+      "y": 35,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "x": 49,
+      "y": 40,
+      "w": 1,
+      "h": 2
+    },
+    {
+      "x": 59,
+      "y": 35,
+      "w": 2,
+      "h": 1
+    }
+  ],
+  "closable": [
+    "洗い場",
+    "蒸し場",
+    "機械室",
+    "休憩室",
+    "道具部屋",
+    "倉庫",
+    "氷室",
+    "餅つき場",
+    "あんこ場",
+    "ずんだ場",
+    "包み場",
+    "帳場",
+    "店先",
+    "座敷"
+  ],
+  "decor": {
+    "rooms": [
+      {
+        "name": "枝豆畑",
+        "x": 1,
+        "y": 1,
+        "w": 20,
+        "h": 12,
+        "floor": "soil",
+        "outdoor": true
+      },
+      {
+        "name": "洗い場",
+        "x": 22,
+        "y": 1,
+        "w": 15,
+        "h": 8,
+        "floor": "stone",
+        "outdoor": false
+      },
+      {
+        "name": "蒸し場",
+        "x": 38,
+        "y": 1,
+        "w": 19,
+        "h": 8,
+        "floor": "stone",
+        "outdoor": false
+      },
+      {
+        "name": "機械室",
+        "x": 62,
+        "y": 1,
+        "w": 9,
+        "h": 8,
+        "floor": "dark",
+        "outdoor": false
+      },
+      {
+        "name": "休憩室",
+        "x": 62,
+        "y": 10,
+        "w": 9,
+        "h": 12,
+        "floor": "tatami",
+        "outdoor": false
+      },
+      {
+        "name": "道具部屋",
+        "x": 62,
+        "y": 23,
+        "w": 9,
+        "h": 12,
+        "floor": "dark",
+        "outdoor": false
+      },
+      {
+        "name": "倉庫",
+        "x": 1,
+        "y": 14,
+        "w": 12,
+        "h": 11,
+        "floor": "dark",
+        "outdoor": false
+      },
+      {
+        "name": "氷室",
+        "x": 1,
+        "y": 26,
+        "w": 12,
+        "h": 9,
+        "floor": "ice",
+        "outdoor": false
+      },
+      {
+        "name": "餅つき場",
+        "x": 18,
+        "y": 14,
+        "w": 11,
+        "h": 9,
+        "floor": "earth",
+        "outdoor": false
+      },
+      {
+        "name": "あんこ場",
+        "x": 18,
+        "y": 24,
+        "w": 11,
+        "h": 7,
+        "floor": "stone",
+        "outdoor": false
+      },
+      {
+        "name": "中庭",
+        "x": 30,
+        "y": 14,
+        "w": 15,
+        "h": 17,
+        "floor": "gravel",
+        "outdoor": true
+      },
+      {
+        "name": "ずんだ場",
+        "x": 46,
+        "y": 14,
+        "w": 11,
+        "h": 9,
+        "floor": "mint",
+        "outdoor": false
+      },
+      {
+        "name": "包み場",
+        "x": 46,
+        "y": 24,
+        "w": 11,
+        "h": 7,
+        "floor": "plank2",
+        "outdoor": false
+      },
+      {
+        "name": "帳場",
+        "x": 1,
+        "y": 36,
+        "w": 12,
+        "h": 9,
+        "floor": "tatami",
+        "outdoor": false
+      },
+      {
+        "name": "店先",
+        "x": 18,
+        "y": 36,
+        "w": 31,
+        "h": 9,
+        "floor": "shop",
+        "outdoor": false
+      },
+      {
+        "name": "座敷",
+        "x": 50,
+        "y": 36,
+        "w": 21,
+        "h": 9,
+        "floor": "tatami",
+        "outdoor": false
+      }
+    ],
+    "halls": [
+      {
+        "name": "北の廊下",
+        "x": 21,
+        "y": 10,
+        "w": 37,
+        "h": 3,
+        "vertical": false
+      },
+      {
+        "name": "南の廊下",
+        "x": 17,
+        "y": 32,
+        "w": 41,
+        "h": 3,
+        "vertical": false
+      },
+      {
+        "name": "西の廊下",
+        "x": 14,
+        "y": 13,
+        "w": 3,
+        "h": 32,
+        "vertical": true
+      },
+      {
+        "name": "東の廊下",
+        "x": 58,
+        "y": 1,
+        "w": 3,
+        "h": 34,
+        "vertical": true
+      }
+    ],
+    "doors": [
+      {
+        "x": 28,
+        "y": 9,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 46,
+        "y": 9,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 37,
+        "y": 4,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 57,
+        "y": 4,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 61,
+        "y": 4,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 61,
+        "y": 15,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 61,
+        "y": 28,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 13,
+        "y": 18,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 13,
+        "y": 29,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 13,
+        "y": 40,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 17,
+        "y": 17,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 22,
+        "y": 13,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 29,
+        "y": 17,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 22,
+        "y": 31,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 29,
+        "y": 27,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 36,
+        "y": 13,
+        "w": 3,
+        "h": 1
+      },
+      {
+        "x": 36,
+        "y": 31,
+        "w": 3,
+        "h": 1
+      },
+      {
+        "x": 45,
+        "y": 17,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 57,
+        "y": 17,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 50,
+        "y": 31,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 57,
+        "y": 27,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 17,
+        "y": 40,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 26,
+        "y": 35,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 40,
+        "y": 35,
+        "w": 2,
+        "h": 1
+      },
+      {
+        "x": 49,
+        "y": 40,
+        "w": 1,
+        "h": 2
+      },
+      {
+        "x": 59,
+        "y": 35,
+        "w": 2,
+        "h": 1
+      }
+    ],
+    "props": [
+      {
+        "kind": "crop",
+        "x": 3,
+        "y": 3,
+        "w": 7,
+        "h": 1
+      },
+      {
+        "kind": "crop",
+        "x": 12,
+        "y": 3,
+        "w": 7,
+        "h": 1
+      },
+      {
+        "kind": "crop",
+        "x": 3,
+        "y": 5,
+        "w": 7,
+        "h": 1
+      },
+      {
+        "kind": "crop",
+        "x": 12,
+        "y": 5,
+        "w": 7,
+        "h": 1
+      },
+      {
+        "kind": "crop",
+        "x": 3,
+        "y": 7,
+        "w": 7,
+        "h": 1
+      },
+      {
+        "kind": "crop",
+        "x": 12,
+        "y": 7,
+        "w": 7,
+        "h": 1
+      },
+      {
+        "kind": "scarecrow",
+        "x": 19,
+        "y": 2,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "basket",
+        "x": 2,
+        "y": 10,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "trough",
+        "x": 27,
+        "y": 3,
+        "w": 5,
+        "h": 2
+      },
+      {
+        "kind": "tub",
+        "x": 23,
+        "y": 7,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "tub",
+        "x": 35,
+        "y": 2,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "panel",
+        "x": 39,
+        "y": 1,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "stove",
+        "x": 44,
+        "y": 3,
+        "w": 6,
+        "h": 2
+      },
+      {
+        "kind": "table",
+        "x": 52,
+        "y": 6,
+        "w": 3,
+        "h": 1,
+        "top": "steamers"
+      },
+      {
+        "kind": "table",
+        "x": 39,
+        "y": 7,
+        "w": 3,
+        "h": 1,
+        "top": "cloth"
+      },
+      {
+        "kind": "generator",
+        "x": 67,
+        "y": 1,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "panel",
+        "x": 64,
+        "y": 1,
+        "w": 1,
+        "h": 1,
+        "top": "fuse"
+      },
+      {
+        "kind": "woodpile",
+        "x": 67,
+        "y": 6,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "lowtable",
+        "x": 65,
+        "y": 14,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "cabinet",
+        "x": 69,
+        "y": 19,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "shelf",
+        "x": 65,
+        "y": 25,
+        "w": 4,
+        "h": 1
+      },
+      {
+        "kind": "shelf",
+        "x": 65,
+        "y": 31,
+        "w": 4,
+        "h": 1
+      },
+      {
+        "kind": "crate",
+        "x": 63,
+        "y": 33,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "breaker",
+        "x": 69,
+        "y": 28,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "panel",
+        "x": 11,
+        "y": 14,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "bales",
+        "x": 3,
+        "y": 16,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "bales",
+        "x": 8,
+        "y": 16,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "bales",
+        "x": 3,
+        "y": 21,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "crate",
+        "x": 8,
+        "y": 21,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "ice",
+        "x": 3,
+        "y": 28,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "ice",
+        "x": 7,
+        "y": 28,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "ice",
+        "x": 3,
+        "y": 32,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "ice",
+        "x": 7,
+        "y": 32,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "usu",
+        "x": 20,
+        "y": 19,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "usu",
+        "x": 25,
+        "y": 15,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "table",
+        "x": 25,
+        "y": 21,
+        "w": 3,
+        "h": 1,
+        "top": "mochi"
+      },
+      {
+        "kind": "pots",
+        "x": 19,
+        "y": 25,
+        "w": 4,
+        "h": 1
+      },
+      {
+        "kind": "table",
+        "x": 24,
+        "y": 28,
+        "w": 3,
+        "h": 1,
+        "top": "bowls_red"
+      },
+      {
+        "kind": "bell",
+        "x": 36,
+        "y": 21,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "well",
+        "x": 32,
+        "y": 25,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "pine",
+        "x": 41,
+        "y": 15,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "stonelamp",
+        "x": 32,
+        "y": 16,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "stonelamp",
+        "x": 42,
+        "y": 22,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "pond",
+        "x": 40,
+        "y": 27,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "table",
+        "x": 49,
+        "y": 17,
+        "w": 5,
+        "h": 2,
+        "top": "bowls_green"
+      },
+      {
+        "kind": "crate",
+        "x": 47,
+        "y": 20,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "table",
+        "x": 48,
+        "y": 26,
+        "w": 4,
+        "h": 1,
+        "top": "boxes"
+      },
+      {
+        "kind": "crate",
+        "x": 54,
+        "y": 24,
+        "w": 2,
+        "h": 2
+      },
+      {
+        "kind": "conveyor",
+        "x": 52,
+        "y": 27,
+        "w": 4,
+        "h": 1
+      },
+      {
+        "kind": "desk",
+        "x": 5,
+        "y": 39,
+        "w": 3,
+        "h": 1
+      },
+      {
+        "kind": "cabinet",
+        "x": 2,
+        "y": 36,
+        "w": 3,
+        "h": 1
+      },
+      {
+        "kind": "chair",
+        "x": 26,
+        "y": 43,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "chair",
+        "x": 39,
+        "y": 43,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "broom",
+        "x": 19,
+        "y": 36,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "panel",
+        "x": 47,
+        "y": 36,
+        "w": 1,
+        "h": 1
+      },
+      {
+        "kind": "counter",
+        "x": 29,
+        "y": 40,
+        "w": 9,
+        "h": 1
+      },
+      {
+        "kind": "display",
+        "x": 21,
+        "y": 37,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "display",
+        "x": 43,
+        "y": 37,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "bench",
+        "x": 22,
+        "y": 43,
+        "w": 3,
+        "h": 1
+      },
+      {
+        "kind": "bench",
+        "x": 42,
+        "y": 43,
+        "w": 3,
+        "h": 1
+      },
+      {
+        "kind": "lowtable",
+        "x": 54,
+        "y": 39,
+        "w": 3,
+        "h": 2
+      },
+      {
+        "kind": "lowtable",
+        "x": 64,
+        "y": 39,
+        "w": 3,
+        "h": 2
+      }
+    ]
+  }
+}
