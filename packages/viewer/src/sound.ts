@@ -9,7 +9,7 @@ import { FIRED } from './show.ts';
 import type { Cue, Show } from './show.ts';
 import { rand } from './theme.ts';
 
-export type Effect = 'bell' | 'nap' | 'cutin' | 'pon' | 'lightsOut' | 'alarm' | 'shut' | 'open' | 'relief' | 'creak' | 'flip' | 'thud' | 'stamp' | 'fanfareWin' | 'fanfareLose';
+export type Effect = 'bell' | 'nap' | 'cutin' | 'pon' | 'lightsOut' | 'alarm' | 'shut' | 'open' | 'relief' | 'creak' | 'flip' | 'thud' | 'stamp' | 'fanfareWin' | 'fanfareLose' | 'peek' | 'monitor';
 
 /**
  * できごとで鳴らす効果音。役職を隠している時（secrets が false）は、音で役職や床下の人が分からないようにする。
@@ -33,6 +33,9 @@ export function effectOf(event: Cue['event'], secrets: boolean): Effect | null {
     // 抜け道は、役職を見せている時だけ聞こえる（音で、床下にいることを明かさない）
     case 'sneak':
       return secrets ? 'creak' : null;
+    // 工房の道具を見る（盤と名札かけは、木の札の音。防犯カメラの画面は、画面がつく音）
+    case 'look':
+      return event.device === 'cameras' ? 'monitor' : 'peek';
     case 'vote':
       return 'flip';
     case 'meeting_end':
@@ -199,6 +202,8 @@ export class Sound {
     else if (effect === 'flip') this.flip();
     else if (effect === 'thud') this.thud();
     else if (effect === 'stamp') this.stamp();
+    else if (effect === 'peek') this.peek();
+    else if (effect === 'monitor') this.monitor();
     else this.fanfare(effect === 'fanfareWin');
     this.base = null;
   }
@@ -358,6 +363,19 @@ export class Sound {
   /** 床下の揚げ板（低い、きしみ）。 */
   creak(): void {
     this.tone(120, 0, 0.3, { type: 'sawtooth', gain: 0.07, slideTo: 190 });
+  }
+
+  /** 見取り図の盤・名札かけを見る（木の札に、こつん、と触れる2音）。 */
+  peek(): void {
+    this.tone(620, 0, 0.08, { type: 'triangle', gain: 0.1, attack: 0.003 });
+    this.tone(830, 0.07, 0.12, { type: 'triangle', gain: 0.09, attack: 0.003 });
+  }
+
+  /** 防犯カメラの画面がつく（ぷつっ、と小さな電子音）。 */
+  monitor(): void {
+    this.tone(1760, 0, 0.05, { type: 'square', gain: 0.05, attack: 0.002 });
+    this.tone(2350, 0.06, 0.09, { type: 'square', gain: 0.045, attack: 0.002 });
+    this.tone(90, 0, 0.25, { type: 'sawtooth', gain: 0.03, slideTo: 140 });
   }
 
   /** 札を開く。 */

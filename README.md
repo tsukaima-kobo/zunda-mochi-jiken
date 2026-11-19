@@ -34,6 +34,10 @@ URL に `?foxes=1` を付けると、どちらにもつかない「狐」が1人
   - **あかりを消す** … 従業員は、すぐ近くしか見えなくなります。道具部屋のブレーカーを上げると戻ります。
   - **かまどを焚きすぎにする** … 決まった時間のうちに、2か所に同時に人がついて直さないと、妖精の勝ちになります。
   - **戸を閉める** … ある部屋の戸を、しばらく閉めます。
+- 工房には、誰でも使える道具が3つあります。
+  - **見取り図の盤**（帳場）… 部屋ごとの、いまの人数がわかります。誰なのかは出ません。廊下にいる人も出ません。
+  - **名札かけ**（休憩室）… 誰がずんだ餅になったかがわかります。
+  - **防犯カメラの画面**（機械室）… 4本の廊下のカメラの映像を、しばらく見張れます。見ている間は、廊下のカメラの赤いランプがつくので、見張られていることがまわりにも分かります。
 
 ### 集会と投票
 
@@ -140,6 +144,10 @@ Add `?foxes=1` to the URL to include one "fox", who sides with neither team and 
   - **Lights out**: workers can only see what is close to them. Flipping the breaker in the tool room restores the lights.
   - **Overheated oven**: two spots must be manned at the same time within a time limit, or the fairies win.
   - **Shut a door**: a room's door stays closed for a while.
+- Three devices in the workshop can be used by anyone:
+  - **Floor-plan board** (front office): shows how many people are in each room right now. It does not show who they are, and people in the hallways are not counted.
+  - **Name-tag rack** (break room): shows who has been turned into mochi.
+  - **Security monitor** (machine room): lets you watch the cameras in the four hallways for a while. While someone is watching, the red lamps on the hallway cameras light up, so people nearby can tell they are being watched.
 
 ### Meetings and votes
 

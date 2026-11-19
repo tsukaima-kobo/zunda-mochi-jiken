@@ -20,6 +20,8 @@ const BLEND_SECONDS = 1.1;
 const NEAR_TILES = 13;
 /** 同じ話の輪とみなす近さ（升）。前に話した人からこの近さで続いた声は、ひとつの場面にまとめる。 */
 const TALK_TILES = 9;
+/** 道具を見ている人を映す長さの上限（秒）。防犯カメラは長く見続けることがあるので、頭のこの秒数だけ。 */
+const LOOK_SHOT_MAX = 6;
 /**
  * 遠くへ切り替えるまでに、同じ場所を映し続ける秒数（瞬間移動が多すぎると、ごちゃごちゃして見づらいため）。
  * 声は工房のあちこちから順に鳴るので、声のたびに追うと、数秒ごとに別の部屋へ飛ぶ。遠くの声は、この秒数がたつまでは追わず、
@@ -43,9 +45,10 @@ export interface Shot {
   zoom: number;
   /**
    * start: 見回りの始まり / patrol: 順番に追う / target: このあと狙われる人 / nap: ずんだ餅に変える（名前は前の題材のなごり） / report: 見つけて知らせる /
-   * bell: 中庭の鐘を鳴らしに行く / sabotage: 妨害が始まる / fix: 困りごとを直す / sneak: 床下の抜け道を通る / chat: 声に出して話している
+   * bell: 中庭の鐘を鳴らしに行く / sabotage: 妨害が始まる / fix: 困りごとを直す / sneak: 床下の抜け道を通る / chat: 声に出して話している /
+   * look: 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見ている
    */
-  why: 'start' | 'patrol' | 'target' | 'nap' | 'report' | 'bell' | 'sabotage' | 'fix' | 'sneak' | 'chat';
+  why: 'start' | 'patrol' | 'target' | 'nap' | 'report' | 'bell' | 'sabotage' | 'fix' | 'sneak' | 'chat' | 'look';
   /** place のとき、映す場所（升目の座標）。 */
   at?: { x: number; y: number };
 }
@@ -190,6 +193,12 @@ export class Director {
           const seat = nearest(this.sites.fix?.[event.what]?.[0], cue.at);
           if (seat !== null) extras.push({ shot: { start: cue.at - 0.2, end: cue.at + 3.6, kind: 'follow', subject: seat, other: seat, zoom: ZOOM.follow, why: 'sabotage' }, key: cue.at + 0.2, rank: 2 });
         }
+      } else if (event.type === 'look' && event.phase === 'start') {
+        // 道具を見ている人。見ている間は、見えたものを画面の隅に出す（scenes.ts）。防犯カメラは長いので、頭の数秒だけ
+        const span = this.show.looks.find((s) => s.by === event.agent && Math.abs(s.start - cue.at) < 1e-6);
+        const until = Math.min(span && Number.isFinite(span.end) ? span.end : cue.at + 2, cue.at + LOOK_SHOT_MAX);
+        const seat = this.seatOf(event.agent);
+        extras.push({ shot: { start: cue.at - 1, end: until + 0.5, kind: 'follow', subject: seat, other: seat, zoom: ZOOM.close, why: 'look' }, key: cue.at + 0.4, rank: 4 });
       } else if (event.type === 'sneak' && event.phase === 'in' && secrets) {
         // 抜け道へもぐる所から、出てくる所まで
         const span = this.show.sneaks.find((s) => s.by === event.by && Math.abs(s.start - cue.at) < 1e-6);

@@ -125,7 +125,7 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
     .filter((fact) => self.role !== 'nibbler' || !/あかりを消した|焚きすぎにした|の戸を閉めた|抜け道/.test(fact))
     // 妖精びいきは、妖精を見たことを言わない
     .filter((fact) => self.role !== 'madman' || !(fact.includes('に手をかざし') || fact.includes('の床下の抜け道')))
-    .map((fact) => (fact.includes('ずんだ餅に変えた') ? `${fact.split(' ')[0]} はひとりで見回りをしていた` : fact));
+    .map((fact) => (fact.includes('ずんだ餅に変えた') ? `${fact.split(' ')[0]} はひとりで見回りをしていた` : deviceFact(fact)));
   // 狐も、見た妖精のことは言う（妖精がいなくなれば試合が終わり、起きている狐の勝ちになる）
   const witnessed = self.role === 'artisan' || self.role === 'fox' ? shareable.find((fact) => fact.includes('に手をかざし') || fact.includes('の床下の抜け道')) : undefined;
   const discovery = shareable.find((fact) => fact.includes('見つけて') || fact.includes('見つけた'));
@@ -144,7 +144,31 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
     const question = meeting.round > 1 && suspect !== abstain ? `${suspect} は、そのころどこにいたの？` : '';
     say = `わたしは ${fewerNames(fact)}。${question}`;
   }
-  return { kind: 'speak', thought: `（台本）疑い先: ${suspect}`, say: trimSay(say, obs.limits.sayMaxChars), suspect };
+  // 台本の発言は、上限より少し短めに切る（字幕が長く残って、声の無い間にならないように）
+  return { kind: 'speak', thought: `（台本）疑い先: ${suspect}`, say: trimSay(say, Math.min(obs.limits.sayMaxChars, SCRIPTED_SAY_CHARS)), suspect };
+}
+
+/** 台本の発言の長さの上限（字）。 */
+const SCRIPTED_SAY_CHARS = 70;
+
+/** 工房の道具で見たこと（記憶の長い行）を、集会で話す短い形にする。道具の行でなければ、そのまま。 */
+export function deviceFact(fact: string): string {
+  const reading = /^(\S+) \S+の「(.+?)」を(?:\d+秒ほど)?見た: (.*)$/.exec(fact);
+  if (!reading) return fact;
+  const [, at, device, body] = reading as unknown as [string, string, string, string];
+  if (body.includes('のカメラ: ')) {
+    const shown = body
+      .split(' / ')
+      .map((part) => /^(.+?)のカメラ: (.+)$/.exec(part))
+      .filter((m): m is RegExpExecArray => !!m && m[2] !== '誰も映らなかった')
+      .map((m) => `${m[1]}に ${m[2]}`);
+    return `${at} ${device}で、${shown.length > 0 ? `${shown.slice(0, 2).join('、')} が映っていた` : '誰も映らなかった'}のを見た`;
+  }
+  if (body.startsWith('ずんだ餅になっている: ')) {
+    const asleep = body.slice('ずんだ餅になっている: '.length).split('。')[0] as string;
+    return `${at} ${device}で、${asleep === 'いない' ? 'みんな起きている' : `${asleep} がずんだ餅になっている`}のを見た`;
+  }
+  return `${at} ${device}で、${body.split('（')[0]} なのを見た`;
 }
 
 /** 歩き回っている間の台本。行動を決めてから、近くの人に聞こえる声で言うことを決める。 */
@@ -189,6 +213,23 @@ function scriptedChat(obs: RoamObservation, seed: number, decision: RoamDecision
   return `${someone.name}、ここで何してたの？`;
 }
 
+/** その種類の道具の名前（この工房に無ければ undefined）。 */
+function deviceNamed(obs: RoamObservation, kind: 'admin' | 'vitals' | 'cameras'): string | undefined {
+  return obs.devices?.find((device) => device.kind === kind)?.name;
+}
+
+/** どれか1つの道具の名前（種で選ぶ。道具の無い工房では undefined）。 */
+function anyDevice(obs: RoamObservation, salt: string): string | undefined {
+  return pick((obs.devices ?? []).map((device) => device.name), `${salt}:device`);
+}
+
+/** 直前に見た見取り図の盤で、1人だけだった部屋。 */
+function loneRooms(obs: RoamObservation): string[] {
+  const admin = deviceNamed(obs, 'admin');
+  if (!admin || !obs.lastResult?.includes(`「${admin}」を見た: `)) return [];
+  return [...obs.lastResult.matchAll(/([^\s、:（]+) 1人/g)].map((m) => m[1] as string).filter((room) => obs.rooms.includes(room));
+}
+
 /** 歩き回っている間の行動の台本。 */
 function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
   const salt = `${seed}:${obs.self.name}:roam:${obs.round}:${obs.clock}`;
@@ -229,6 +270,15 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
       }
     }
     if (trouble && roll < 3) return decide('直しに行って見せる', 'fix');
+    // 見取り図の盤で、ひとりきりの部屋が分かったら、そこへ行く
+    const lone = loneRooms(obs).filter((room) => room !== obs.where);
+    if (lone.length > 0 && roll < 7) {
+      const room = pick(lone, `${salt}:lone`) as string;
+      return decide(`見取り図の盤で、${room} がひとりきりだと分かった。行ってみる`, 'move_to', room);
+    }
+    // 力が使えるようになるまでの間に、たまに見取り図の盤を見る
+    const admin = deviceNamed(obs, 'admin');
+    if (admin && (obs.napCooldown ?? 0) > 8 && roll2 === 0) return decide('見取り図の盤で、ひとりきりの人を探す', 'check', admin);
   } else if (madman) {
     // 妖精びいき: 見つけても、たいていは知らせない。困りごとは、目立たない程度にだけ直しに行く
     if (sleeper && roll < 3) return decide(`ずんだ餅になった ${sleeper.name} を知らせる（疑われないように）`, 'report', sleeper.name);
@@ -238,6 +288,9 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     }
     if (trouble?.kind === 'crisis' && roll < 4) return decide('かまどを直しに行くふりをする', 'fix');
     if (trouble?.kind === 'lights' && roll < 2) return decide('あかりを直しに行くふりをする', 'fix');
+    // 仕込みはふりだけなので、ときどき工房の道具を見に行く
+    const device = anyDevice(obs, salt);
+    if (device && !trouble && roll2 === 0) return decide(`${device} を見に行く`, 'check', device);
   } else if (fox) {
     // 狐: 起きたまま試合が終わればよい。たいていは知らせる（妖精がクビになれば早く終わる）。ひとりきりを避けて、人のそばにいる
     if (sleeper && roll < 7) return decide(`ずんだ餅になった ${sleeper.name} を知らせる`, 'report', sleeper.name);
@@ -248,6 +301,9 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     if (trouble?.kind === 'crisis' && roll < 3) return decide('かまどを直しに行くふりをする', 'fix');
     const buddy = pick(awake, `${salt}:buddy`);
     if (buddy && awake.length <= 2 && roll < 5) return decide(`${buddy.name} のそばにいる`, 'follow', buddy.name);
+    // 仕込みはふりだけなので、ときどき工房の道具を見に行く（名札かけで、残りの人数を確かめる）
+    const device = anyDevice(obs, salt);
+    if (device && !trouble && roll2 === 0) return decide(`${device} を見に行く`, 'check', device);
   } else {
     if (sleeper) return decide(`ずんだ餅になった ${sleeper.name} を知らせる`, 'report', sleeper.name);
     // 決め手になることを目の前で見たら、鐘を鳴らしに行く
@@ -255,6 +311,14 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     if (decisive && obs.bell && obs.bell.usesLeft > 0 && obs.bell.waitSeconds === 0 && !trouble) return decide('見たことを知らせに、鐘を鳴らしに行く', 'call_meeting');
     if (trouble?.kind === 'crisis') return decide('かまどを落ち着かせに行く', 'fix');
     if (trouble?.kind === 'lights' && roll < 6) return decide('あかりを直しに行く', 'fix');
+    // 防犯カメラに、ずんだ餅になった人が映った。その廊下へ見に行く
+    const onCamera = obs.events.map((event) => /防犯カメラ（(.+?)）に、ずんだ餅になった/.exec(event)?.[1]).find((place) => place && obs.rooms.includes(place));
+    if (onCamera) return decide(`カメラに映った ${onCamera} へ見に行く`, 'move_to', onCamera);
+    // 防犯カメラの画面を見ている途中なら、たいていは、そのまま見続ける
+    if (obs.activity.includes('「防犯カメラの画面」を見ている') && roll < 6) return decide('もう少しカメラを見ている', 'check', deviceNamed(obs, 'cameras') as string);
+    // 仕込みが終わったら、道具で見張る（仕込みの途中では見に行かない。手を止めると、仕込みが終わらない）
+    const device = anyDevice(obs, salt);
+    if (device && !trouble && openDuties(obs).length === 0 && roll < 5) return decide(`${device} を見に行く`, 'check', device);
   }
 
   // 仕込み。妖精と妖精びいきは、ふりをしたり、人を探して歩いたりする

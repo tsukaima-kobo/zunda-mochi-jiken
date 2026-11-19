@@ -4,6 +4,7 @@
 import type { MatchEvent, MatchLog } from '../../server/src/match-core.ts';
 import { calloutsOf } from '../../server/src/narration.ts';
 import type { Callout } from '../../server/src/narration.ts';
+import type { DeviceKind } from '../../protocol/src/index.ts';
 import type { MapDefinition } from '../../sim/src/index.ts';
 import { CUTIN_LINE, displayText } from '../../speech/src/index.ts';
 import type { SpeechClip, SpeechTimeline } from '../../speech/src/index.ts';
@@ -116,6 +117,22 @@ export interface SneakSpan {
   seenOut: string[];
 }
 
+/**
+ * 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見ていた間。
+ * 見えたもの（counts・tags・seen）は、見終わった時の記録から入る（途中でやめた時は、防犯カメラの seen だけ）。
+ */
+export interface LookSpan {
+  seat: number;
+  by: string;
+  device: DeviceKind;
+  start: number;
+  end: number;
+  aborted: boolean;
+  counts?: Record<string, number>;
+  tags?: { name: string; status: 'awake' | 'asleep' | 'sent_home' }[];
+  seen?: { camera: string; names: string[] }[];
+}
+
 /** 妖精が人をずんだ餅に変える直前の、見せ場の差し込み（役職を見せている時だけ出す）。 */
 export interface Cutin {
   at: number;
@@ -154,6 +171,8 @@ export interface Show {
   troubles: TroubleSpan[];
   shuts: ShutSpan[];
   sneaks: SneakSpan[];
+  /** 工房の道具を見ていた間（上映の時刻の順）。古い記録では空。 */
+  looks: LookSpan[];
   /** 餅に変える直前の差し込み（上映の時刻の順）。 */
   cutins: Cutin[];
   /** 案内役の一言（上映の時刻の順）。 */
@@ -177,7 +196,7 @@ const ENDING_SECONDS = 12;
 const SPEAK_PAD = 0.2;
 const GAP = 0.2;
 /** 見回りの中の出来事を、画面でどのくらいの間あつかうか（秒）。 */
-const ROAM_CUE_SECONDS: Partial<Record<MatchEvent['type'], number>> = { decide: 3.2, nap: 2.4, task: 1.8, sabotage: 4.5, fixed: 3.2, door_open: 1.2, sneak: 1.3, bell: 1 };
+const ROAM_CUE_SECONDS: Partial<Record<MatchEvent['type'], number>> = { decide: 3.2, nap: 2.4, task: 1.8, sabotage: 4.5, fixed: 3.2, door_open: 1.2, sneak: 1.3, bell: 1, look: 2 };
 
 /**
  * 見回りの間の声は、前の声と重ならないよう、終わるのを待ってから流す。待ちがこの秒数を超える声は、ふきだしだけにする。
@@ -279,7 +298,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
   /** 見回りの中の声（登場人物の声と、案内役の一言）。見回りが終わる時に、まとめて並べる。talk: 聞いている人がいる声（ひとりごとでない）。 */
   let pending: { chat: Cue | null; callout: ShowCallout | null; said: number; length: number; talk: boolean }[] = [];
   /** 見回りが始まった時の、各一覧の長さ（この見回りの中で足したものを、あとで時刻を引きのばすため）。 */
-  let mark = { cues: 0, callouts: 0, progress: 0, troubles: 0, shuts: 0, sneaks: 0 };
+  let mark = { cues: 0, callouts: 0, progress: 0, troubles: 0, shuts: 0, sneaks: 0, looks: 0 };
   /**
    * 見回りの声を並べ、声が詰まっている所では、絵をゆっくり流す（時刻を引きのばす）。
    * 言った順に、前の声が鳴り終わるのを待ってから次の声を流す。前の声が鳴っている間は、世界を SLOW_SPEED まで遅くして、
@@ -438,9 +457,11 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
   const troubles: TroubleSpan[] = [];
   const shuts: ShutSpan[] = [];
   const sneaks: SneakSpan[] = [];
+  const looks: LookSpan[] = [];
   let trouble: TroubleSpan | null = null;
   let shut: ShutSpan[] = [];
   let under: SneakSpan[] = [];
+  let looking: LookSpan[] = [];
   /** 困りごと・閉まった戸・床下にいる人は、集会が始まるか試合が終わると片づく。 */
   const settle = (at: number, how: TroubleSpan['how']) => {
     if (trouble) {
@@ -450,8 +471,13 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
     }
     for (const span of shut) span.end = at;
     for (const span of under) span.end = at;
+    for (const span of looking) {
+      span.end = at;
+      span.aborted = true;
+    }
     shut = [];
     under = [];
+    looking = [];
   };
 
   const closeRoam = (clock: number) => {
@@ -475,7 +501,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       c.end = c.at + length;
     }
     for (const point of progress.slice(mark.progress)) point.at = shift(point.at);
-    for (const span of [...troubles.slice(mark.troubles), ...shuts.slice(mark.shuts), ...sneaks.slice(mark.sneaks)]) {
+    for (const span of [...troubles.slice(mark.troubles), ...shuts.slice(mark.shuts), ...sneaks.slice(mark.sneaks), ...looks.slice(mark.looks)]) {
       span.start = shift(span.start);
       if (Number.isFinite(span.end)) span.end = shift(span.end);
     }
@@ -512,7 +538,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       const own = frames.filter((f) => f.r === event.round);
       roam = { kind: 'roam', start: cursor, end: cursor, round: event.round, clock0: event.t, frames: own.filter((f, i) => i === 0 || f.t > (own[i - 1] as Frame).t + 1e-9) };
       segments.push(roam);
-      mark = { cues: cues.length, callouts: callouts.length, progress: progress.length, troubles: troubles.length, shuts: shuts.length, sneaks: sneaks.length };
+      mark = { cues: cues.length, callouts: callouts.length, progress: progress.length, troubles: troubles.length, shuts: shuts.length, sneaks: sneaks.length, looks: looks.length };
       cues.push({ at: cursor, end: cursor, event });
       if (event.tasks && event.tasks.total > 0) progress.push({ at: cursor, done: event.tasks.done, total: event.tasks.total, bump: false });
     } else if (event.type === 'decide' || event.type === 'nap' || event.type === 'task' || event.type === 'sabotage' || event.type === 'fixed' || event.type === 'door_open' || event.type === 'sneak' || event.type === 'bell') {
@@ -567,6 +593,27 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
             span.seenOut = event.witnesses;
             under = under.filter((s) => s !== span);
           }
+        }
+      }
+    } else if (event.type === 'look') {
+      // 見始めは、カメラの係とできごとの音のために、1つのできごとにする。見終わりは、見ていた間を閉じるだけ
+      const at = roam ? roam.start + (event.t - roam.clock0) : cursor;
+      if (event.phase === 'start') {
+        cues.push({ at, end: at + (ROAM_CUE_SECONDS.look ?? 2), event });
+        const span: LookSpan = { seat: log.seats.indexOf(event.agent), by: event.agent, device: event.device, start: at, end: Infinity, aborted: false };
+        if (span.seat >= 0) {
+          looking.push(span);
+          looks.push(span);
+        }
+      } else {
+        const span = looking.find((s) => s.by === event.agent && s.device === event.device);
+        if (span) {
+          span.end = at;
+          span.aborted = event.aborted === true;
+          if (event.counts) span.counts = event.counts;
+          if (event.tags) span.tags = event.tags;
+          if (event.seen) span.seen = event.seen;
+          looking = looking.filter((s) => s !== span);
         }
       }
     } else if (event.type === 'chat') {
@@ -676,7 +723,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
   }
 
   callouts.sort((a, b) => a.at - b.at);
-  return { log, segments, cues, total: Math.max(cursor, 1), opening: log.roam?.config.roamSeconds ?? 0, progress, troubles, shuts, sneaks, cutins, callouts };
+  return { log, segments, cues, total: Math.max(cursor, 1), opening: log.roam?.config.roamSeconds ?? 0, progress, troubles, shuts, sneaks, looks, cutins, callouts };
 }
 
 /** その時刻の、仕込みの進み具合。仕込みの無い記録では null。since は、最後に仕込みが1つ終わった時刻（まだなら -Infinity）。 */

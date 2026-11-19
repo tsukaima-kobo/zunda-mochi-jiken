@@ -4,9 +4,12 @@
 //   おしまい: 勝敗と、全員の役職
 
 import type { MatchEvent } from '../../server/src/match-core.ts';
+import { centerOf, hasLineOfSight, parseMap } from '../../sim/src/index.ts';
+import type { GameMap } from '../../sim/src/index.ts';
 import { displayText, mouthAt, revealedChars } from '../../speech/src/index.ts';
 import { drawActor, drawPortrait, sparkle } from './actors.ts';
 import { drawCutin } from './cutin.ts';
+import { cameraMount, deviceSpot, drawCameraLamp, drawNameTags, drawScreensOn } from './devices.ts';
 import { drawBust, hasPortrait } from './portraits.ts';
 import { drawPlayNarration, pickBar } from './narrator-bar.ts';
 import type { ActorLook, Mood } from './actors.ts';
@@ -151,6 +154,8 @@ interface WorldNow {
 const LAYER_TILE = 72;
 /** 登場人物の大きさ（升目より少し大きく描く）。 */
 const ACTOR_SCALE = (LAYER_TILE / 56) * 1.5;
+/** 防犯カメラの映像の中の人の大きさ（ふつうの何倍か）。 */
+const FEED_ACTOR = 1.6;
 /** 餅に変わった時の札を出しておく秒数。 */
 const SIGHT_TAG_SECONDS = 3.6;
 
@@ -199,6 +204,7 @@ const ACTION_SHORT: Record<string, (target: string) => string> = {
   call_meeting: () => '鐘を鳴らしに行く！',
   sneak: (target) => `抜け道で ${target} へ`,
   sabotage: (target) => `${sabotageText(target)}…`,
+  check: (target) => `${target} へ`,
 };
 const ACTION_LONG: Record<string, (target: string) => string> = {
   move_to: (target) => `${target} へ向かう`,
@@ -214,6 +220,7 @@ const ACTION_LONG: Record<string, (target: string) => string> = {
   call_meeting: () => '中庭の鐘を鳴らしに行く',
   sneak: (target) => `床下の抜け道で ${target} へ`,
   sabotage: (target) => `妨害: ${sabotageText(target)}`,
+  check: (target) => `${target} を見に行く`,
 };
 /** ずんだの妖精だけが選べる行動（役職と内心を出さない時は、画面に出さない）。nap・nap_if_unseen は前の題材の記録。 */
 const SECRET_ACTIONS = new Set(['transform', 'transform_if_unseen', 'nap', 'nap_if_unseen', 'sneak', 'sabotage']);
@@ -245,6 +252,9 @@ export class Stage {
   readonly show: Show;
   private readonly shop: Workshop | null;
   private readonly director: Director | null;
+  /** 防犯カメラの映像で、壁の向こうを映さないための間取り。 */
+  private readonly grid: GameMap | null;
+  private camBoxes: { x0: number; y0: number; x1: number; y1: number; vertical: boolean }[] | null = null;
   private readonly members: Member[];
   private readonly byName = new Map<string, Member>();
   private readonly decides = new Map<string, Cue[]>();
@@ -279,6 +289,7 @@ export class Stage {
 
     const map = log.roam?.map;
     this.shop = map ? buildWorkshop(map, LAYER_TILE) : null;
+    this.grid = map?.devices?.cameras ? parseMap(map) : null;
     if (map) {
       // 手を動かす時は、いちばん近い家具のほうを向く
       const faceAt = (x: number, y: number): -1 | 1 => {
@@ -347,6 +358,9 @@ export class Stage {
       } else if (event.type === 'bell') {
         // 鐘は見回りの最後の瞬間に鳴るので、告知の間も読めるように、ほんの少し手前に置く
         this.headlines.push({ at: cue.at - 0.05, text: `${event.by} が、中庭の鐘を鳴らした！`, alert: true });
+      } else if (event.type === 'look' && event.phase === 'start') {
+        const device = log.roam?.map.devices?.[event.device];
+        if (device) this.headlines.push({ at: cue.at, text: `${event.agent} が、${device.room}の「${device.name}」を${event.device === 'cameras' ? 'のぞいている' : '見ている'}`, alert: false });
       } else if (event.type === 'chat') {
         this.chats.push(cue);
       } else if (event.type === 'nap') {
@@ -564,6 +578,7 @@ export class Stage {
     this.drawCast(ctx, segment, poses, now, poseTime, time, options, camera.subject, castTop);
     this.drawStrip(ctx, segment, poseTime, time, options, camera);
     this.drawChatLine(ctx, segment, poseTime, time);
+    this.drawLookPanel(ctx, segment, poses, camera, poseTime, time);
     // 餅に変える直前の見せ場（役職を見せている時だけ。画面のいちばん上に描く）
     if (options.secrets) {
       for (const cut of this.show.cutins) {
@@ -671,6 +686,7 @@ export class Stage {
     const sw = Math.min(shop.width, Math.ceil(view.x1)) - sx;
     const sh = Math.min(shop.height, Math.ceil(view.y1)) - sy;
     if (sw > 0 && sh > 0) ctx.drawImage(shop.layer, sx, sy, sw, sh, sx, sy, sw, sh);
+    this.drawDevicesNow(ctx, tile, poseTime, time, inView);
 
     // ずんだ餅に変わった場所に、ずんだ色の輪
     if (nap && napEvent && napK >= 0 && napK <= 1.4) {
@@ -1082,6 +1098,17 @@ export class Stage {
       else if (spot.kind === 'lights') this.workLabel(ctx, at.x, top, tile, 'ブレーカーを上げている', ratio, 'fix', time);
       else this.workLabel(ctx, at.x, top, tile, fake ? `${spot.name}（ふり）` : spot.name, ratio, fake ? 'fake' : 'task', time);
     }
+    // 工房の道具を見ている人: 見ている道具と、見終わるまで
+    for (const span of this.show.looks) {
+      if (poseTime < span.start || poseTime >= span.end) continue;
+      const pose = poses[span.seat];
+      if (!isUp(pose)) continue;
+      const at = px(pose);
+      if (!inView(at.x, at.y, tile * 2)) continue;
+      const device = this.show.log.roam?.map.devices?.[span.device];
+      const ratio = Number.isFinite(span.end) ? (poseTime - span.start) / Math.max(0.2, span.end - span.start) : null;
+      this.workLabel(ctx, at.x, clear(at.x, at.y - tile * 1.55), tile, `${device?.name ?? '道具'}を見ている`, ratio, 'look', time);
+    }
 
     // 仕込みが1つ終わった合図（心だけの人は、心だけの姿の上に出る）
     for (const cue of this.tasks) {
@@ -1234,29 +1261,272 @@ export class Stage {
     ctx.drawImage(this.darkLayer, 0, 0, W, H);
   }
 
+  /**
+   * 工房の道具を見ている人をカメラが映している間、その人に見えているものを、画面の左上に出す。
+   * 見取り図の盤は部屋ごとの人数、名札かけは全員の名札、防犯カメラの画面は廊下の4つの映像。
+   */
+  private drawLookPanel(ctx: Ctx, segment: RoamSegment, poses: ActorPose[], camera: Camera, poseTime: number, time: number): void {
+    const shop = this.shop;
+    const devices = this.show.log.roam?.map.devices;
+    if (!shop || !devices || camera.subject === null) return;
+    const span = this.show.looks.find((s) => s.seat === camera.subject && poseTime >= s.start && poseTime < s.end + 0.35 && s.start >= segment.start - 0.01);
+    const device = span ? devices[span.device] : undefined;
+    const member = span ? this.members[span.seat] : undefined;
+    if (!span || !device || !member) return;
+    const enter = easeOut((poseTime - span.start) / 0.3);
+    const leave = Number.isFinite(span.end) ? clamp01((span.end + 0.35 - poseTime) / 0.35) : 1;
+    const x = 28;
+    const y = 104;
+    // 幅は、真ん中に映る本人の頭の上の札にかからない所まで
+    const w = 548;
+    const h = span.device === 'cameras' ? 470 : span.device === 'vitals' ? 420 : 410;
+    ctx.save();
+    ctx.globalAlpha = Math.min(enter, leave);
+    ctx.translate((1 - enter) * -40, 0);
+    plaque(ctx, x, y, w, h, { radius: 22, fill: span.device === 'cameras' ? '#232a30' : PAPER, edge: span.device === 'cameras' ? '#14191b' : WOOD_DARK });
+    // 見出し: 誰が、どの道具を見ているか
+    setFont(ctx, 24, 800);
+    const nw = ctx.measureText(member.name).width + 32;
+    roundRect(ctx, x + 18, y + 14, nw, 40, 20);
+    ctx.fillStyle = member.color.main;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = member.color.dark;
+    ctx.stroke();
+    drawText(ctx, member.name, x + 18 + nw / 2, y + 35, { size: 24, color: '#fff', align: 'center', weight: 800, stroke: member.color.dark, strokeWidth: 4 });
+    drawText(ctx, `が見ている　${device.room}の「${device.name}」`, x + 18 + nw + 12, y + 35, { size: 24, weight: 800, color: span.device === 'cameras' ? '#e8f3ee' : INK });
+    const body = { x: x + 18, y: y + 66, w: w - 36, h: h - 84 };
+    if (span.device === 'admin') this.drawAdminBody(ctx, shop, body, span.counts ?? null);
+    else if (span.device === 'vitals') this.drawVitalsBody(ctx, body, span.tags ?? null, poseTime, time);
+    else this.drawCameraFeeds(ctx, shop, segment, body, poses, span.seat, poseTime, time);
+    ctx.restore();
+  }
+
+  /** 見取り図の盤: 工房の見取り図に、部屋ごとの人数。廊下は出ない。誰なのかも出ない。 */
+  private drawAdminBody(ctx: Ctx, shop: Workshop, body: { x: number; y: number; w: number; h: number }, counts: Record<string, number> | null): void {
+    const scale = Math.min(body.w / shop.mini.width, (body.h - 30) / shop.mini.height);
+    const mw = shop.mini.width * scale;
+    const mh = shop.mini.height * scale;
+    const mx = body.x + (body.w - mw) / 2;
+    const my = body.y;
+    ctx.drawImage(shop.mini, mx, my, mw, mh);
+    const per = (scale * shop.miniTile);
+    for (const room of shop.rooms) {
+      const cx = mx + (room.x + room.w / 2) * per;
+      const cy = my + (room.y + room.h / 2) * per;
+      const n = counts?.[room.name] ?? 0;
+      drawText(ctx, room.name, cx, cy - (n > 0 ? 17 : 0), { size: 15, align: 'center', weight: 800, color: 'rgba(59, 42, 30, 0.75)' });
+      if (n <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 9, 15, 0, Math.PI * 2);
+      ctx.fillStyle = n === 1 ? '#c0392b' : ZUNDA_DARK;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      drawText(ctx, String(n), cx, cy + 10, { size: 19, align: 'center', weight: 900, color: '#fff' });
+    }
+    drawText(ctx, '数字は、その部屋にいる人数（廊下の人は出ない・誰なのかは出ない）', body.x + body.w / 2, my + mh + 18, { size: 17, align: 'center', weight: 700, color: '#6b5a48' });
+  }
+
+  /** 名札かけ: 全員の名札。ずんだ餅になった人と、クビになった人が分かる。 */
+  private drawVitalsBody(ctx: Ctx, body: { x: number; y: number; w: number; h: number }, tags: { name: string; status: 'awake' | 'asleep' | 'sent_home' }[] | null, poseTime: number, time: number): void {
+    const status = this.statusAt(poseTime);
+    const list = tags ?? this.members.map((m) => ({ name: m.name, status: status.get(m.name) === 'z' ? ('asleep' as const) : status.get(m.name) === 'x' ? ('sent_home' as const) : ('awake' as const) }));
+    const cols = 3;
+    const cw = body.w / cols;
+    const ch = Math.min(84, body.h / Math.ceil(list.length / cols));
+    list.forEach((tag, i) => {
+      const member = this.byName.get(tag.name);
+      if (!member) return;
+      const cx = body.x + (i % cols) * cw;
+      const cy = body.y + Math.floor(i / cols) * ch;
+      const asleep = tag.status === 'asleep';
+      const gone = tag.status === 'sent_home';
+      roundRect(ctx, cx + 4, cy + 4, cw - 8, ch - 8, 14);
+      ctx.fillStyle = asleep ? '#e3f1cf' : gone ? '#dcd6cc' : '#fffdf6';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = asleep ? ZUNDA_DARK : gone ? '#8c8478' : member.color.dark;
+      ctx.stroke();
+      if (asleep) zundaMochi(ctx, cx + 38, cy + ch / 2 + 4, 26, true);
+      else drawPortrait(ctx, cx + 38, cy + ch / 2, 26, { ...this.look(member, time), mood: 'normal', dim: gone });
+      drawText(ctx, member.name, cx + 74, cy + ch / 2 - 12, { size: 21, weight: 800, color: gone ? '#7a7166' : INK });
+      const label = asleep ? 'ずんだ餅' : gone ? 'クビ' : '起きている';
+      drawText(ctx, label, cx + 74, cy + ch / 2 + 15, { size: 17, weight: 800, color: asleep ? ZUNDA_DARK : gone ? '#7a7166' : '#4a7fb0' });
+    });
+  }
+
+  /** 防犯カメラごとの、映る範囲の升目の四角（壁の向こうと、映る距離の外を除く）。 */
+  private cameraBoxes(): { x0: number; y0: number; x1: number; y1: number; vertical: boolean }[] {
+    if (this.camBoxes) return this.camBoxes;
+    const cameras = this.show.log.roam?.map.devices?.cameras;
+    const grid = this.grid;
+    this.camBoxes = (cameras?.points ?? []).map((point) => {
+      const eye = centerOf(point);
+      const box = { x0: point.x, y0: point.y, x1: point.x + 1, y1: point.y + 1 };
+      const r = Math.ceil(cameras?.radius ?? 0);
+      for (let y = point.y - r; y <= point.y + r; y++) {
+        for (let x = point.x - r; x <= point.x + r; x++) {
+          const at = centerOf({ x, y });
+          if (!grid || x < 0 || y < 0 || x >= grid.width || y >= grid.height) continue;
+          if (Math.hypot(at.x - eye.x, at.y - eye.y) > (cameras?.radius ?? 0) || !hasLineOfSight(grid, eye, at)) continue;
+          box.x0 = Math.min(box.x0, x);
+          box.y0 = Math.min(box.y0, y);
+          box.x1 = Math.max(box.x1, x + 1);
+          box.y1 = Math.max(box.y1, y + 1);
+        }
+      }
+      return { ...box, vertical: box.y1 - box.y0 > box.x1 - box.x0 };
+    });
+    return this.camBoxes;
+  }
+
+  /**
+   * 防犯カメラの画面: 廊下のカメラの映像。横の廊下は横長、縦の廊下は縦長の映像にする。
+   * 映るのは、カメラから見通せて、映る距離の中の人だけ（壁の向こうは映らない）。暗くても映る。
+   */
+  private drawCameraFeeds(ctx: Ctx, shop: Workshop, segment: RoamSegment, body: { x: number; y: number; w: number; h: number }, poses: ActorPose[], watcher: number, poseTime: number, time: number): void {
+    const cameras = this.show.log.roam?.map.devices?.cameras;
+    if (!cameras) return;
+    const tile = shop.tile;
+    const pace = roamClockAt(segment, poseTime);
+    const boxes = this.cameraBoxes();
+    const gap = 10;
+    const tall = cameras.points.map((_, i) => i).filter((i) => boxes[i]?.vertical);
+    const wide = cameras.points.map((_, i) => i).filter((i) => !boxes[i]?.vertical);
+    const tallW = wide.length > 0 ? 96 : (body.w - gap * (tall.length - 1)) / Math.max(1, tall.length);
+    const wideW = body.w - tall.length * (tallW + gap);
+    const frames = new Map<number, { x: number; y: number; w: number; h: number }>();
+    wide.forEach((i, n) => {
+      const h = (body.h - gap * (wide.length - 1)) / wide.length;
+      frames.set(i, { x: body.x, y: body.y + n * (h + gap), w: wideW, h });
+    });
+    tall.forEach((i, n) => frames.set(i, { x: body.x + (wide.length > 0 ? wideW + gap : 0) + n * (tallW + gap), y: body.y, w: tallW, h: body.h }));
+    cameras.points.forEach((point, i) => {
+      const frame = frames.get(i);
+      const box = boxes[i];
+      if (!frame || !box) return;
+      const { x: fx, y: fy, w: fw, h: fh } = frame;
+      const eye = centerOf(point);
+      // 映る範囲がまるごと入る大きさにして、映像の形に合わせて広げる
+      const bw = box.x1 - box.x0;
+      const bh = box.y1 - box.y0;
+      const per = Math.min(fw / bw, fh / bh);
+      const cropW = fw / per;
+      const cropH = fh / per;
+      const left = (box.x0 + box.x1) / 2 - cropW / 2;
+      const top = (box.y0 + box.y1) / 2 - cropH / 2;
+      const scale = per / tile;
+      ctx.save();
+      roundRect(ctx, fx, fy, fw, fh, 10);
+      ctx.clip();
+      ctx.fillStyle = '#10161a';
+      ctx.fillRect(fx, fy, fw, fh);
+      ctx.translate(fx, fy);
+      ctx.scale(scale, scale);
+      ctx.translate(-left * tile, -top * tile);
+      const sx = Math.max(0, Math.floor(left * tile));
+      const sy = Math.max(0, Math.floor(top * tile));
+      const sw = Math.min(shop.width, Math.ceil((left + cropW) * tile)) - sx;
+      const sh = Math.min(shop.height, Math.ceil((top + cropH) * tile)) - sy;
+      if (sw > 0 && sh > 0) ctx.drawImage(shop.layer, sx, sy, sw, sh, sx, sy, sw, sh);
+      // 映っている人（カメラから見通せて、映る距離の中）。奥から手前へ
+      const shown = this.members
+        .map((member) => ({ member, pose: poses[member.seat] }))
+        .filter((e): e is { member: Member; pose: ActorPose } => {
+          const pose = e.pose;
+          if (!pose || e.member.seat === watcher || (pose.state !== 'a' && pose.state !== 'w' && pose.state !== 'z')) return false;
+          return Math.hypot(pose.x - eye.x, pose.y - eye.y) <= cameras.radius && (!this.grid || hasLineOfSight(this.grid, eye, pose));
+        })
+        .sort((a, b) => a.pose.y - b.pose.y);
+      for (const { member, pose } of shown) {
+        // 映像は小さいので、人は少し大きめに描く（見分けやすく）
+        drawActor(ctx, { ...this.look(member, time), pace, x: pose.x * tile, y: pose.y * tile + tile * 0.3, scale: ACTOR_SCALE * FEED_ACTOR, facing: pose.dx < -0.001 ? -1 : 1, walking: pose.moving, working: pose.state === 'w', asleep: pose.state === 'z', mood: 'normal', wings: false, talk: 0 });
+      }
+      ctx.restore();
+      // 画面らしさ: 緑がかった色・走査線・枠
+      ctx.save();
+      roundRect(ctx, fx, fy, fw, fh, 10);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(70, 160, 120, 0.14)';
+      ctx.fillRect(fx, fy, fw, fh);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+      for (let yy = fy + ((time * 30) % 4); yy < fy + fh; yy += 4) ctx.fillRect(fx, yy, fw, 1.5);
+      const vignette = ctx.createRadialGradient(fx + fw / 2, fy + fh / 2, Math.min(fw, fh) * 0.35, fx + fw / 2, fy + fh / 2, Math.max(fw, fh) * 0.75);
+      vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      vignette.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(fx, fy, fw, fh);
+      if (shown.length > 0) {
+        const names = shown.map((e) => e.member.name).join('・');
+        drawText(ctx, names, fx + fw / 2, fy + fh - 16, { size: fw < 140 ? 15 : 18, align: 'center', weight: 800, color: '#fff', stroke: '#10161a', strokeWidth: 5 });
+      }
+      ctx.restore();
+      roundRect(ctx, fx, fy, fw, fh, 10);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#5b666f';
+      ctx.stroke();
+      // 場所の名前（縦長の映像では、縦書き）
+      if (fw < 140) {
+        [...point.name].forEach((ch, k) => drawText(ctx, ch, fx + 16, fy + 22 + k * 20, { size: 17, align: 'center', weight: 800, color: '#fff', stroke: '#10161a', strokeWidth: 5 }));
+      } else {
+        drawText(ctx, point.name, fx + 12, fy + 20, { size: 19, weight: 800, color: '#fff', stroke: '#10161a', strokeWidth: 5 });
+      }
+      if (Math.floor(time * 2) % 2 === 0) {
+        ctx.beginPath();
+        ctx.arc(fx + fw - 16, fy + 18, 7, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff3b2a';
+        ctx.fill();
+      }
+    });
+  }
+
+  /** 工房の道具の、動く部分: 名札かけの名札・防犯カメラの画面の明かり・廊下のカメラの赤いランプ（工房の絵の座標で描く）。 */
+  private drawDevicesNow(ctx: Ctx, tile: number, poseTime: number, time: number, inView: (x: number, y: number, pad: number) => boolean): void {
+    const devices = this.show.log.roam?.map.devices;
+    if (!devices) return;
+    const watching = this.show.looks.some((span) => span.device === 'cameras' && poseTime >= span.start && poseTime < span.end);
+    const screen = deviceSpot(devices, 'cameras', tile);
+    if (screen && watching && inView(screen.cx, screen.base, tile * 3)) drawScreensOn(ctx, screen.cx, screen.base, tile, time);
+    for (const camera of devices.cameras?.points ?? []) {
+      const mount = cameraMount(camera, tile);
+      if (inView(mount.x, mount.y, tile * 2)) drawCameraLamp(ctx, camera, tile, watching, time);
+    }
+    const board = deviceSpot(devices, 'vitals', tile);
+    if (board && inView(board.cx, board.base, tile * 3)) {
+      const status = this.statusAt(poseTime);
+      const tags = this.members.map((member) => {
+        const now = status.get(member.name);
+        return { color: member.color.main, dark: member.color.dark, state: now === 'z' ? ('asleep' as const) : now === 'x' ? ('gone' as const) : ('awake' as const) };
+      });
+      drawNameTags(ctx, board.cx, board.base, tile, tags);
+    }
+  }
+
   /** 持ち場で手を動かしている人の上に出す、小さな札（していることと、進み具合）。ratio が null の時は、押さえ続けている。 */
-  private workLabel(ctx: Ctx, x: number, y: number, tile: number, text: string, ratio: number | null, tone: 'task' | 'fake' | 'fix', time: number): void {
+  private workLabel(ctx: Ctx, x: number, y: number, tile: number, text: string, ratio: number | null, tone: 'task' | 'fake' | 'fix' | 'look', time: number): void {
     const size = tile * 0.27;
     setFont(ctx, size, 800);
     const w = Math.max(tile * 1.5, ctx.measureText(text).width + size * 1.3);
     const h = size * 2.3;
-    const edge = tone === 'task' ? INK : '#a3261d';
+    const edge = tone === 'task' ? INK : tone === 'look' ? '#2f5d8a' : '#a3261d';
     ctx.save();
     ctx.translate(x, y);
     roundRect(ctx, -w / 2, -h, w, h, size * 0.5);
-    ctx.fillStyle = tone === 'fix' ? '#fff0d6' : tone === 'fake' ? '#ffe3df' : '#fffdf6';
+    ctx.fillStyle = tone === 'fix' ? '#fff0d6' : tone === 'fake' ? '#ffe3df' : tone === 'look' ? '#eaf3ff' : '#fffdf6';
     ctx.fill();
     ctx.lineWidth = 2.4;
     ctx.strokeStyle = edge;
     ctx.stroke();
-    drawText(ctx, text, 0, -h + size * 0.8, { size, align: 'center', weight: 800, color: tone === 'task' ? INK : '#a3261d' });
+    drawText(ctx, text, 0, -h + size * 0.8, { size, align: 'center', weight: 800, color: tone === 'task' ? INK : tone === 'look' ? '#2f5d8a' : '#a3261d' });
     const bw = w - size;
     const bh = size * 0.4;
     const by = -size * 0.78;
     roundRect(ctx, -bw / 2, by, bw, bh, bh / 2);
     ctx.fillStyle = 'rgba(60, 40, 20, 0.2)';
     ctx.fill();
-    ctx.fillStyle = tone === 'task' ? ZUNDA_DARK : tone === 'fake' ? '#d49a93' : '#e67e22';
+    ctx.fillStyle = tone === 'task' ? ZUNDA_DARK : tone === 'fake' ? '#d49a93' : tone === 'look' ? '#4a90d9' : '#e67e22';
     if (ratio === null) {
       const p = (Math.sin(time * 5) + 1) / 2;
       roundRect(ctx, -bw / 2 + (bw - bw * 0.32) * p, by, bw * 0.32, bh, bh / 2);

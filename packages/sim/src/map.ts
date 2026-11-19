@@ -68,6 +68,33 @@ export interface Hatch {
   group: string;
 }
 
+/** 工房の道具の種類。admin: 見取り図の盤（部屋ごとの人数） / vitals: 名札かけ（全員が起きているか） / cameras: 防犯カメラの画面。 */
+export type DeviceKind = 'admin' | 'vitals' | 'cameras';
+export const DEVICE_KINDS: readonly DeviceKind[] = ['admin', 'vitals', 'cameras'];
+
+/** 工房の道具。x・y は、使う時に立つ升目（道具は、その升目に面した壁や台にある）。 */
+export interface DeviceDefinition {
+  name: string;
+  room: string;
+  x: number;
+  y: number;
+}
+
+/** 防犯カメラ。name は映している場所の呼び名、x・y はカメラの目の升目（廊下）。wall は、カメラを取り付けた壁の升目（絵のため）。 */
+export interface CameraPoint {
+  name: string;
+  x: number;
+  y: number;
+  wall?: { x: number; y: number };
+}
+
+export interface MapDevices {
+  admin?: DeviceDefinition;
+  vitals?: DeviceDefinition;
+  /** radius は、カメラに映る距離（升）。あいだに壁や閉まった戸があれば映らない。暗くても映る。 */
+  cameras?: DeviceDefinition & { radius: number; points: CameraPoint[] };
+}
+
 /** content/maps/*.json の形。 */
 export interface MapDefinition {
   name: string;
@@ -93,6 +120,8 @@ export interface MapDefinition {
   doors?: Rect[];
   /** 戸を閉められる部屋の名前。 */
   closable?: string[];
+  /** 工房の道具（見取り図の盤・名札かけ・防犯カメラ）。 */
+  devices?: MapDevices;
   decor?: MapDecor;
 }
 

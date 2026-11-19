@@ -122,6 +122,7 @@ export function checkRoamIntent(obs: RoamObservation, json: unknown, denyList: r
   else if (action === 'do_task') fits = duties.length > 0;
   else if (action === 'fix') fits = !!obs.trouble;
   else if (action === 'sneak') fits = (obs.hatches ?? []).some((group) => group.rooms.includes(target));
+  else if (action === 'check') fits = (obs.devices ?? []).some((device) => device.name === target);
   else if (action === 'sabotage') fits = target === SABOTAGE_LIGHTS || target === SABOTAGE_CRISIS || (obs.sabotage?.doorRooms.includes(target) ?? false);
   else fits = awake.includes(target);
   // どの行動の target が合わなかったかを残す（聞き直しの文を、本人が選んだ行動の分だけにするため）
@@ -148,6 +149,7 @@ export function roamFeedbackFor(problems: readonly string[], obs: RoamObservatio
     else if (wrong === 'report') parts.push(`report の target は、いま見えている、ずんだ餅になった人にしてください（${list(asleep, 'いまは見えていない')}）。`);
     else if (wrong === 'do_task') parts.push('自分の仕込みは、もう残っていません。ほかの行動を選んでください。');
     else if (wrong === 'fix') parts.push('いま、直すものはありません。ほかの行動を選んでください。');
+    else if (wrong === 'check') parts.push(`check の target は、道具の名前にしてください: ${(obs.devices ?? []).map((d) => d.name).join(' / ')}`);
     else if (wrong === 'sneak') parts.push(`sneak の target は、抜け道の出入口のある部屋にしてください: ${(obs.hatches ?? []).flatMap((group) => group.rooms).join(' / ')}`);
     else if (wrong === 'sabotage') parts.push(`sabotage の target は「${SABOTAGE_LIGHTS}」「${SABOTAGE_CRISIS}」か、戸を閉められる部屋の名前にしてください: ${(obs.sabotage?.doorRooms ?? []).join(' / ')}`);
     else parts.push(`${wrong} の target は、いま見えている起きている相手にしてください（${list(awake, 'いまは誰も見えていない')}）。`);

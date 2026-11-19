@@ -217,8 +217,11 @@ export interface RoamObservation {
   secondsUntilOpening: number;
   /** いまいる場所の名前（部屋か通路）。 */
   where: string;
-  /** いま見えている相手。並びは名簿順（全員が知っている並び）。asleep はずんだ餅になっている。working は持ち場で手を動かしている。 */
-  visible: { name: string; where: string; asleep: boolean; working?: boolean }[];
+  /**
+   * いま見えている相手。並びは名簿順（全員が知っている並び）。asleep はずんだ餅になっている。working は持ち場で手を動かしている。
+   * checking は、工房の道具（見取り図の盤など）を見ている時の、その道具の名前。
+   */
+  visible: { name: string; where: string; asleep: boolean; working?: boolean; checking?: string }[];
   /** 自分の仕込み（本人だけが知っている）。steps は回る順。 */
   duties?: RoamDuty[];
   /** 工房全体の仕込みの進み具合（全員に見えている）。仕込みの無いマップでは null。 */
@@ -233,6 +236,12 @@ export interface RoamObservation {
   sabotage?: { waitSeconds: number; doorWaitSeconds: number; doorRooms: string[] } | null;
   /** 妖精だけ: 床下の抜け道。同じ組の部屋どうしがつながっている。従業員は null。 */
   hatches?: { group: string; rooms: string[] }[] | null;
+  /** 工房の道具（誰でも見に行ける。全員が知っている）。kind: admin 見取り図の盤 / vitals 名札かけ / cameras 防犯カメラの画面。 */
+  devices?: RoamDevice[];
+  /** 防犯カメラの画面を見ている間だけ: カメラごとに、いま映っている人。見ていなければ null。 */
+  cameraView?: { place: string; seen: { name: string; asleep: boolean }[] }[] | null;
+  /** 赤いランプのついた防犯カメラのうち、本人から見えているもの（誰かが画面を見ている）。 */
+  cameraLit?: string[];
   /** この瞬間に本人が見聞きした出来事（状態の見比べでは分からないもの）。 */
   events: string[];
   /**
@@ -271,6 +280,16 @@ export interface RoamDuty {
   steps: { what: string; room: string; done: boolean }[];
 }
 
+export type DeviceKind = 'admin' | 'vitals' | 'cameras';
+
+export interface RoamDevice {
+  kind: DeviceKind;
+  /** 道具の名前（check の target）。 */
+  name: string;
+  /** 置いてある部屋。 */
+  room: string;
+}
+
 export interface RoamTrouble {
   kind: 'lights' | 'crisis';
   /** crisis のときだけ: 残り秒数。 */
@@ -286,8 +305,9 @@ export const SABOTAGE_CRISIS = 'かまど';
 /**
  * 誰でもできる行動。report は、見えている、ずんだ餅になった人を知らせて集会を開く。
  * do_task は自分の仕込みを進める。fix は困りごとを直しに行く。call_meeting は中庭の鐘を鳴らしに行く。
+ * check は工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見に行く。
  */
-export const ROAM_ACTIONS = ['move_to', 'follow', 'wait', 'report', 'do_task', 'fix', 'call_meeting'] as const;
+export const ROAM_ACTIONS = ['move_to', 'follow', 'wait', 'report', 'do_task', 'fix', 'call_meeting', 'check'] as const;
 /** 妖精だけができる行動。transform は人をずんだ餅に変える。transform_if_unseen は、ほかの誰にも見られていない時だけ変える。 */
 export const NIBBLER_ACTIONS = ['transform', 'transform_if_unseen', 'sneak', 'sabotage'] as const;
 export const ALL_ROAM_ACTIONS = [...ROAM_ACTIONS, ...NIBBLER_ACTIONS] as const;
@@ -299,14 +319,16 @@ export const RoamIntent = z.object({
   /** 声に出して言うこと（近くの人にだけ聞こえる）。言わない時は空。 */
   say: z.string().default(''),
   action: z.enum(ALL_ROAM_ACTIONS),
-  /** move_to: 部屋の名前 / follow・report・transform: いま見えている相手の名前 / do_task: 仕込みの名前か「なし」 / fix: 直す場所の名前か「なし」 / wait・call_meeting: 「なし」 */
+  /** move_to: 部屋の名前 / follow・report・transform: いま見えている相手の名前 / do_task: 仕込みの名前か「なし」 / fix: 直す場所の名前か「なし」 / check: 道具の名前 / wait・call_meeting: 「なし」 */
   target: z.string(),
 });
 export type RoamIntent = z.infer<typeof RoamIntent>;
 
 /** 本人が選べる行動。役職で変わる（スキーマは本人にしか渡らない）。 */
 export function roamActions(obs: RoamObservation): RoamAction[] {
-  return obs.self.role === 'nibbler' ? [...ROAM_ACTIONS, ...NIBBLER_ACTIONS] : [...ROAM_ACTIONS];
+  // 道具の無い工房では、check は出さない
+  const common = (obs.devices ?? []).length > 0 ? [...ROAM_ACTIONS] : ROAM_ACTIONS.filter((a) => a !== 'check');
+  return obs.self.role === 'nibbler' ? [...common, ...NIBBLER_ACTIONS] : common;
 }
 
 /** まだ終わっていない自分の仕込みの名前。 */
@@ -322,6 +344,7 @@ export function roamTargets(obs: RoamObservation): string[] {
     ...openDuties(obs),
     ...(obs.trouble?.fixAt.map((f) => f.name) ?? []),
     ...(obs.sabotage ? [SABOTAGE_LIGHTS, SABOTAGE_CRISIS] : []),
+    ...(obs.devices ?? []).map((d) => d.name),
     NO_TARGET,
   ];
   return [...new Set(targets)];

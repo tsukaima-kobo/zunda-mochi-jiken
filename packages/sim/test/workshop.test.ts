@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { actorById, applyRoamIntent, areaAt, buildRoamObservation, centerOf, createRoamWorld, findPath, findRoute, hasLineOfSight, isWalkable, parseMap, stepRoam, visibleTo } from '../src/index.ts';
+import { actorById, applyRoamIntent, areaAt, buildRoamObservation, centerOf, createRoamWorld, findPath, findRoute, hasLineOfSight, isWalkable, nameOf, parseMap, playerById, stepRoam, visibleTo } from '../src/index.ts';
 import type { MapDefinition, Point } from '../src/index.ts';
 
 const mapDef = JSON.parse(readFileSync(path.resolve(import.meta.dirname, '../../../content/maps/workshop.json'), 'utf8')) as MapDefinition;
@@ -123,5 +123,122 @@ describe('広いマップでの試合', () => {
     expect(w.clock).toBeGreaterThan(6);
     expect(visibleTo(w, walker)).not.toContain(stayer);
     expect(visibleTo(w, stayer)).not.toContain(walker);
+  });
+});
+
+describe('工房の道具（見取り図の盤・名札かけ・防犯カメラ）', () => {
+  const setup = (seed = 3) => {
+    const w = createRoamWorld({ seed, map: mapDef, players: 6 });
+    const put = (id: string, tile: Point) => {
+      const actor = actorById(w, id);
+      actor.pos = centerOf(tile);
+      actor.path = [];
+    };
+    const runUntilIdle = (id: string) => {
+      let n = 0;
+      while (actorById(w, id).task !== null && w.result === null && n < 4000) {
+        stepRoam(w);
+        n++;
+      }
+    };
+    const watching = (id: string) => {
+      const task = actorById(w, id).task;
+      return task?.kind === 'look' && task.until !== null;
+    };
+    return { w, put, runUntilIdle, watching, name: (id: string) => nameOf(w, id) };
+  };
+  const ice = middle('氷室');
+  const devices = mapDef.devices as NonNullable<MapDefinition['devices']>;
+
+  it('3つの道具は、マップに書いた部屋の、歩いて行ける升目にあり、観測には名前と部屋が出る（場所の座標は出ない）', () => {
+    for (const kind of ['admin', 'vitals', 'cameras'] as const) {
+      const device = devices[kind] as { name: string; room: string; x: number; y: number };
+      expect(isWalkable(map, device.x, device.y), kind).toBe(true);
+      expect(areaAt(map, centerOf(device)), kind).toBe(device.room);
+    }
+    const { w } = setup();
+    const obs = buildRoamObservation(w, w.roster[0] as string);
+    expect(obs.devices).toEqual([
+      { kind: 'admin', name: '見取り図の盤', room: '帳場' },
+      { kind: 'vitals', name: '名札かけ', room: '休憩室' },
+      { kind: 'cameras', name: '防犯カメラの画面', room: '機械室' },
+    ]);
+    expect(obs.cameraView).toBeNull();
+  });
+
+  it('見取り図の盤: 部屋ごとの人数が分かる。誰なのかは出ない', () => {
+    const { w, put, runUntilIdle, name } = setup();
+    const [looker, loner] = w.roster as [string, string];
+    put(loner, ice);
+    applyRoamIntent(w, looker, { action: 'check', target: '見取り図の盤' });
+    runUntilIdle(looker);
+    const reading = buildRoamObservation(w, looker).lastResult ?? '';
+    expect(reading).toContain('「見取り図の盤」を見た');
+    expect(reading).toContain('氷室 1人');
+    expect(reading).toContain('帳場 1人');
+    expect(reading).toContain('中庭 4人');
+    expect(reading).not.toContain(name(loner));
+    const end = w.happenings.find((h) => h.type === 'look' && h.phase === 'end');
+    expect(end).toMatchObject({ id: looker, device: 'admin', counts: { 氷室: 1, 帳場: 1, 中庭: 4 } });
+  });
+
+  it('名札かけ: ずんだ餅になった人が分かる', () => {
+    const { w, runUntilIdle, name } = setup();
+    const [looker, mochi] = w.roster as [string, string];
+    playerById(w, mochi).status = 'asleep';
+    applyRoamIntent(w, looker, { action: 'check', target: '名札かけ' });
+    runUntilIdle(looker);
+    expect(buildRoamObservation(w, looker).lastResult).toContain(`ずんだ餅になっている: ${name(mochi)}`);
+  });
+
+  it('防犯カメラ: 見ている間は廊下が映り、映った人からは赤いランプが見える。見終わると、映った人が本人に伝わる', () => {
+    const { w, put, watching, runUntilIdle, name } = setup();
+    const [looker, walker, ...rest] = w.roster as [string, string, ...string[]];
+    for (const id of rest) put(id, ice);
+    put(looker, devices.cameras as Point);
+    put(walker, { x: 41, y: 10 });
+    expect(buildRoamObservation(w, walker).cameraLit).toEqual([]);
+    applyRoamIntent(w, looker, { action: 'check', target: '防犯カメラの画面' });
+    stepRoam(w);
+    expect(watching(looker)).toBe(true);
+    const view = buildRoamObservation(w, looker).cameraView ?? [];
+    expect(view.find((v) => v.place === '北の廊下')?.seen).toEqual([{ name: name(walker), asleep: false }]);
+    expect(buildRoamObservation(w, walker).cameraLit).toEqual(['北の廊下']);
+    // 氷室の人は、廊下のカメラが見えないので、ランプにも気づかない
+    expect(buildRoamObservation(w, rest[0] as string).cameraLit).toEqual([]);
+    runUntilIdle(looker);
+    expect(buildRoamObservation(w, looker).lastResult).toContain(`北の廊下のカメラ: ${name(walker)}`);
+    expect(buildRoamObservation(w, walker).cameraLit).toEqual([]);
+  });
+
+  it('防犯カメラの画面で見られている間は、「見られていない時だけ変える」は待つ', () => {
+    const { w, put, watching } = setup();
+    const nibbler = w.actors.find((a) => a.nibbler)?.id as string;
+    const artisans = w.actors.filter((a) => !a.nibbler && !a.madman && !a.fox).map((a) => a.id);
+    const [looker, target] = artisans as [string, string];
+    for (const id of w.roster) if (id !== nibbler && id !== looker && id !== target) put(id, ice);
+    put(looker, devices.cameras as Point);
+    put(nibbler, { x: 40, y: 10 });
+    put(target, { x: 41, y: 10 });
+    w.napReadyAt[nibbler] = 0;
+    applyRoamIntent(w, looker, { action: 'check', target: '防犯カメラの画面' });
+    applyRoamIntent(w, nibbler, { action: 'transform_if_unseen', target: nameOf(w, target) });
+    let n = 0;
+    stepRoam(w);
+    while (n < 4000 && watching(looker)) {
+      // 画面を見ている刻みのあいだは、変えない（見終わった刻みには変わってよい）
+      expect(playerById(w, target).status).toBe('awake');
+      stepRoam(w);
+      n++;
+    }
+    expect(n).toBeGreaterThan(10);
+    // 画面から離れたら、変えられる
+    for (let k = 0; k < 40 && playerById(w, target).status === 'awake'; k++) stepRoam(w);
+    expect(playerById(w, target).status).toBe('asleep');
+  });
+
+  it('知らない道具の名前は、決まり違反になる', () => {
+    const { w } = setup();
+    expect(() => applyRoamIntent(w, w.roster[0] as string, { action: 'check', target: '金庫' })).toThrow(/unknown_device|道具/);
   });
 });

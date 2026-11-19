@@ -18,6 +18,9 @@ export interface Sighting {
   with: string[];
 }
 
+/** 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見終わった時の結果。集会でも使う手がかりなので、大事な行に残す。 */
+const DEVICE_READING = /」を(\d+秒ほど)?見た: /;
+
 /** 見え隠れ（廊下の角や戸口）で同じ人を何度も書かないよう、同じ場所でこの秒数のうちにまた見えた時は書かない。 */
 const REPEAT_SECONDS = 10;
 
@@ -100,6 +103,8 @@ export class AgentMemory {
       }
       // 持ち場で手を動かし始めた所（本当に仕込みをしているかは、見ただけでは分からない）
       if (now.working && !was?.working && !(recently && last.working)) this.note(`${at} ${name} が ${now.where} の持ち場で手を動かしているのを見た`);
+      // 工房の道具を見ているところ（見た中身は、見ている本人にしか分からない）
+      if (now.checking && now.checking !== was?.checking) this.note(`${at} ${name} が ${now.where} で「${now.checking}」を見ているのを見た`);
       this.noted.set(name, { at: obs.clock, where: now.where, working: now.working === true });
     }
     // 見えなくなったことは書かない。移れば見えなくなるのは当たり前で、書くと「消えた＝抜け道」と取り違えやすい。
@@ -111,7 +116,7 @@ export class AgentMemory {
       else this.talk.push(`${at} ${voice.speaker}（${voice.where ?? '姿は見えなかった'}）「${voice.text}」`);
     }
     if (obs.lastResult && obs.lastResult !== before?.lastResult) {
-      this.note(`${at} ${obs.lastResult}`, obs.lastResult.includes('をずんだ餅に変えた'));
+      this.note(`${at} ${obs.lastResult}`, obs.lastResult.includes('をずんだ餅に変えた') || DEVICE_READING.test(obs.lastResult));
     }
     this.previous = obs;
   }

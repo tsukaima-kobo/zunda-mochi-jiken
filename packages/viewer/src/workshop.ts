@@ -2,6 +2,7 @@
 // 動かない部分（床、壁、壁の飾り）は一度だけ描いておく。家具は登場人物と一緒に毎コマ描く（props.ts）。
 
 import type { MapDecor, MapDefinition } from '../../sim/src/index.ts';
+import { DEVICE_WIDTH, deviceSpot, drawDeviceBoard, drawWallCamera } from './devices.ts';
 import { drawBell, drawSteamer } from './props.ts';
 import type { PropBox } from './props.ts';
 import { drawText, FONT, INK, lerp, MOCHI, PAPER, rand, roundRect, setFont, WOOD, WOOD_DARK, ZUNDA, ZUNDA_DARK, zundaMochi } from './theme.ts';
@@ -242,6 +243,16 @@ export function buildWorkshop(map: MapDefinition, tile: number): Workshop {
       return !used.some(([a, b]) => k0 < b && k1 > a);
     };
 
+    // 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）は、道具の升目のすぐ奥の壁にかける。名札や飾りは、よけて置く
+    for (const kind of ['admin', 'vitals', 'cameras'] as const) {
+      const spot = deviceSpot(map.devices, kind, tile);
+      if (!spot || spot.wallY !== wallY || spot.x < room.x || spot.x >= room.x + room.w) continue;
+      const half = DEVICE_WIDTH[kind] / 2 / room.w;
+      const k = (spot.cx / tile - room.x) / room.w;
+      used.push([k - half - 0.02, k + half + 0.02]);
+      drawDeviceBoard(ctx, kind, spot.cx, base, tile);
+    }
+
     // 名札は、真ん中に戸口がある時は横へずらす
     const plateW = Math.max(tile * 1.7, [...room.name].length * tile * 0.42 + 26 * u);
     const half = plateW / width / 2 + 0.01;
@@ -304,6 +315,8 @@ export function buildWorkshop(map: MapDefinition, tile: number): Workshop {
       }
     }
   }
+  // 廊下の防犯カメラ
+  for (const camera of map.devices?.cameras?.points ?? []) drawWallCamera(ctx, camera, tile);
   // 小さいマップ: いちばん奥の通路の壁の真ん中に鐘（広いマップでは、中庭の鐘つき堂が家具として置いてある）
   if (!map.decor) {
     const topCorridor: number[] = [];

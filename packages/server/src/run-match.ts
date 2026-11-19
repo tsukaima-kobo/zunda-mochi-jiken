@@ -100,7 +100,19 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
       else if (h.type === 'door_open') match.record({ type: 'door_open', t: h.t, room: h.room });
       else if (h.type === 'sneak') match.record({ type: 'sneak', t: h.t, by: name(h.id), phase: h.phase, room: h.room, hatch: h.hatch, witnesses: h.witnesses.map(name) });
       else if (h.type === 'chat') match.record({ type: 'chat', t: h.t, speaker: name(h.id), say: h.text, heard: h.heard.map(name) });
-      else match.record({ type: 'bell', t: h.t, by: name(h.id) });
+      else if (h.type === 'look') {
+        match.record({
+          type: 'look',
+          t: h.t,
+          agent: name(h.id),
+          device: h.device,
+          phase: h.phase,
+          ...(h.aborted ? { aborted: true } : {}),
+          ...(h.counts ? { counts: h.counts } : {}),
+          ...(h.tags ? { tags: h.tags.map((tag) => ({ name: name(tag.id), status: tag.status })) } : {}),
+          ...(h.seen ? { seen: h.seen.map((view) => ({ camera: view.camera, names: view.ids.map(name) })) } : {}),
+        });
+      } else match.record({ type: 'bell', t: h.t, by: name(h.id) });
     }
     happeningsRecorded = world.happenings.length;
     for (const incident of world.incidents.slice(incidentsRecorded)) {
@@ -110,7 +122,7 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
         by: name(incident.byId),
         target: name(incident.targetId),
         room: incident.room,
-        witnesses: incident.witnesses.map((w) => ({ name: name(w.id), sawWho: w.sawWho })),
+        witnesses: incident.witnesses.map((w) => ({ name: name(w.id), sawWho: w.sawWho, ...(w.camera ? { camera: w.camera } : {}) })),
       });
     }
     incidentsRecorded = world.incidents.length;

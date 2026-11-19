@@ -9,6 +9,8 @@
 // - 「妖精びいき」は、妖精の味方をする人間（人狼の狂人）。誰が妖精かは知らず、妖精も知らない。
 //   仕込みはふりだけで、特別な行動は無い。頭数は人間の側に数える。妖精が勝てば勝ち。
 // - ずんだ餅になった人を見つけた人は知らせて、集会を開ける。中庭の鐘を鳴らして、みんなを集めることもできる。
+// - 工房の道具は誰でも使える: 見取り図の盤（部屋ごとの、いまの人数）・名札かけ（誰がずんだ餅になったか）・
+//   防犯カメラの画面（廊下のカメラに映っている人。見ている間は、カメラの赤いランプがつく）。
 // - 集会の投票で選ばれた人は、工房からクビにする。全員に分かるのは、その人が妖精だったかどうかだけ。
 // - ずんだ餅になった従業員は、心だけになって自分の仕込みを続ける（起きている人には見えない）。
 // - 起きている人間（従業員と妖精びいき）が、妖精の人数以下になれば、妖精の勝ち。
@@ -18,7 +20,7 @@
 import { bondsOf, CAST, NO_TARGET, ROAM_SAY_MAX_CHARS, SABOTAGE_CRISIS, SABOTAGE_LIGHTS } from '../../protocol/src/index.ts';
 import type { CastMember, Role, RoamObservation, Side } from '../../protocol/src/index.ts';
 import { areaAt, centerOf, findRoute, findRouteThroughDoors, hasLineOfSight, isWalkable, parseMap, tileOf } from './map.ts';
-import type { DutyDefinition, FixPoint, GameMap, Hatch, MapDefinition, Point, Station } from './map.ts';
+import type { CameraPoint, DeviceDefinition, DeviceKind, DutyDefinition, FixPoint, GameMap, Hatch, MapDefinition, Point, Station } from './map.ts';
 import { createRng } from './rng.ts';
 import { castOf, clockText, DEFAULT_MEETING_CONFIG, nameOf, playerById, RuleViolation } from './world.ts';
 import type { Ballot, MeetingConfig, MeetingWorld, PlayerId, PlayerTruth } from './world.ts';
@@ -86,6 +88,10 @@ export interface RoamConfig {
   hearRadius: number;
   /** 1人が話してから、次に話せるまでの秒数。 */
   chatGap: number;
+  /** 見取り図の盤・名札かけを見るのにかかる秒数。 */
+  lookSeconds: number;
+  /** 防犯カメラの画面を、1回で見続ける秒数。 */
+  cameraSeconds: number;
 }
 
 export const DEFAULT_ROAM_CONFIG: RoamConfig = {
@@ -118,6 +124,8 @@ export const DEFAULT_ROAM_CONFIG: RoamConfig = {
   sneakSeconds: 2,
   hearRadius: 0,
   chatGap: 6,
+  lookSeconds: 2,
+  cameraSeconds: 8,
 };
 
 /** 見回りの間に1回で話せる長さ（字）。長い分は切る。 */
@@ -135,7 +143,12 @@ type Task =
   | { kind: 'fix'; point: string; workLeft: number | null; doors: number; auto: boolean }
   | { kind: 'bell'; doors: number }
   /** until は、抜け道から出る時刻（出入口へ歩いている間は null）。 */
-  | { kind: 'sneak'; from: string; to: string; until: number | null; doors: number };
+  | { kind: 'sneak'; from: string; to: string; until: number | null; doors: number }
+  /**
+   * 工房の道具を見る。until は見終わる時刻（道具へ歩いている間は null）。
+   * seen は、防犯カメラに映った人（カメラの場所 → 人）。noticed は、カメラに映ったのを知らせた、ずんだ餅になった人。
+   */
+  | { kind: 'look'; device: DeviceKind; until: number | null; doors: number; seen: Record<string, PlayerId[]>; noticed: PlayerId[] };
 
 export interface DutyStep {
   station: string;
@@ -194,8 +207,8 @@ export interface Incident {
   byId: PlayerId;
   targetId: PlayerId;
   room: string;
-  /** 見ていた人。sawWho が false なら、餅に変わるところだけ見えた。 */
-  witnesses: { id: PlayerId; sawWho: boolean }[];
+  /** 見ていた人。sawWho が false なら、餅に変わるところだけ見えた。camera は、防犯カメラの画面で見ていた時の、カメラの場所。 */
+  witnesses: { id: PlayerId; sawWho: boolean; camera?: string }[];
 }
 
 /** 餅に変えられた以外の出来事の記録。観戦者とログのためのもので、エージェントには渡さない。 */
@@ -207,6 +220,21 @@ export type Happening =
   | { type: 'door_open'; t: number; room: string }
   | { type: 'sneak'; t: number; id: PlayerId; phase: 'in' | 'out'; room: string; hatch: string; witnesses: PlayerId[] }
   | { type: 'bell'; t: number; id: PlayerId }
+  /**
+   * 工房の道具を見た。start は見始め、end は見終わり（aborted は、途中で集会になった・ほかの行動に移った）。
+   * end には、見えたもの: admin は部屋ごとの人数、vitals は全員の名札、cameras はカメラごとに映った人。
+   */
+  | {
+      type: 'look';
+      t: number;
+      id: PlayerId;
+      device: DeviceKind;
+      phase: 'start' | 'end';
+      aborted?: boolean;
+      counts?: Record<string, number>;
+      tags?: { id: PlayerId; status: 'awake' | 'asleep' | 'sent_home' }[];
+      seen?: { camera: string; ids: PlayerId[] }[];
+    }
   /** 近くの人にだけ聞こえる声で話した。heard は聞こえた人（話した本人は入らない）。 */
   | { type: 'chat'; t: number; id: PlayerId; text: string; heard: PlayerId[] };
 
@@ -443,6 +471,149 @@ function canHear(world: RoamWorld, from: Actor, to: Actor): boolean {
   return Math.hypot(to.pos.x - from.pos.x, to.pos.y - from.pos.y) <= radius && hasLineOfSight(world.map, from.pos, to.pos);
 }
 
+// ───────── 工房の道具 ─────────
+
+function deviceOf(world: RoamWorld, kind: DeviceKind): DeviceDefinition | null {
+  return world.map.def.devices?.[kind] ?? null;
+}
+
+/** 道具の名前から種類を引く（この工房に無い道具なら null）。 */
+function deviceKindByName(world: RoamWorld, name: string): DeviceKind | null {
+  const devices = world.map.def.devices ?? {};
+  for (const kind of ['admin', 'vitals', 'cameras'] as const) if (devices[kind]?.name === name) return kind;
+  return null;
+}
+
+function cameraPoints(world: RoamWorld): CameraPoint[] {
+  return world.map.def.devices?.cameras?.points ?? [];
+}
+
+/** カメラに映るか。距離の内で、あいだに壁や閉まった戸が無いこと。暗くても映る。床下の抜け道の中は映らない。 */
+function cameraSees(world: RoamWorld, camera: CameraPoint, point: Point): boolean {
+  const radius = world.map.def.devices?.cameras?.radius ?? 0;
+  const eye = centerOf(camera);
+  return Math.hypot(point.x - eye.x, point.y - eye.y) <= radius && hasLineOfSight(world.map, eye, point);
+}
+
+/** いま防犯カメラの画面を見ている人（名簿順）。 */
+function cameraWatchers(world: RoamWorld): PlayerId[] {
+  return awakeIds(world).filter((id) => {
+    const task = actorById(world, id).task;
+    return task?.kind === 'look' && task.device === 'cameras' && task.until !== null;
+  });
+}
+
+/** その人が、いま防犯カメラの画面で見ている所のうち、point が映っているカメラ（見ていなければ空）。 */
+function camerasShowing(world: RoamWorld, watcher: Actor, point: Point): CameraPoint[] {
+  const task = watcher.task;
+  if (task?.kind !== 'look' || task.device !== 'cameras' || task.until === null) return [];
+  return cameraPoints(world).filter((camera) => cameraSees(world, camera, point));
+}
+
+/** カメラごとに、いま映っている人（ずんだ餅になった人も入る）。並びは名簿順。 */
+function cameraView(world: RoamWorld, camera: CameraPoint): PlayerId[] {
+  return world.roster.filter((id) => {
+    const other = actorById(world, id);
+    return other.onMap && !other.under && cameraSees(world, camera, other.pos);
+  });
+}
+
+/** 道具を見ている人なら、その道具の名前（歩いて向かっている間は null）。そばで見ている人には分かる。 */
+function lookingAt(world: RoamWorld, actor: Actor): string | null {
+  const task = actor.task;
+  return task?.kind === 'look' && task.until !== null ? (deviceOf(world, task.device)?.name ?? null) : null;
+}
+
+/** 見取り図の盤: 部屋ごとの、いまの人数（ずんだ餅になった人も数える。廊下と、床下の抜け道の中は出ない）。 */
+function adminCounts(world: RoamWorld): Record<string, number> {
+  const counts: Record<string, number> = Object.fromEntries(Object.values(world.map.def.rooms).map((room) => [room, 0]));
+  for (const other of world.actors) {
+    if (!other.onMap || other.under) continue;
+    const room = areaAt(world.map, other.pos);
+    if (room in counts) counts[room] = (counts[room] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** 名札かけ: 全員の名札（起きている・ずんだ餅になった・クビ）。名簿順。 */
+function vitalsTags(world: RoamWorld): { id: PlayerId; status: 'awake' | 'asleep' | 'sent_home' }[] {
+  return world.roster.map((id) => {
+    const status = playerById(world, id).status;
+    return { id, status: status === 'asleep' ? 'asleep' : status === 'sent_home' ? 'sent_home' : 'awake' };
+  });
+}
+
+function joinNames(world: RoamWorld, ids: readonly PlayerId[]): string {
+  return ids.map((id) => nameOf(world, id)).join('、');
+}
+
+/** 見終わった時に、本人に伝える文（見えたものだけ）。 */
+function lookReading(world: RoamWorld, device: DeviceDefinition, kind: DeviceKind, task: Extract<Task, { kind: 'look' }>): string {
+  if (kind === 'admin') {
+    const counts = Object.entries(adminCounts(world)).filter(([, n]) => n > 0);
+    return `${device.room}の「${device.name}」を見た: ${counts.map(([room, n]) => `${room} ${n}人`).join('、')}（ほかの部屋は0人。廊下にいる人は盤に出ない。誰なのかは出ない）`;
+  }
+  if (kind === 'vitals') {
+    const tags = vitalsTags(world);
+    const asleep = tags.filter((t) => t.status === 'asleep').map((t) => t.id);
+    const gone = tags.filter((t) => t.status === 'sent_home').map((t) => t.id);
+    const parts = [`ずんだ餅になっている: ${asleep.length > 0 ? joinNames(world, asleep) : 'いない'}`];
+    if (gone.length > 0) parts.push(`クビ: ${joinNames(world, gone)}`);
+    return `${device.room}の「${device.name}」を見た: ${parts.join('。')}。ほかの人は起きている`;
+  }
+  const views = cameraPoints(world).map((camera) => {
+    const ids = task.seen[camera.name] ?? [];
+    return `${camera.name}のカメラ: ${ids.length > 0 ? joinNames(world, ids) : '誰も映らなかった'}`;
+  });
+  return `${device.room}の「${device.name}」を${world.roam.cameraSeconds}秒ほど見た: ${views.join(' / ')}`;
+}
+
+/**
+ * 道具を見終わる（aborted なら途中でやめた）。見終わった時は、見えたものを本人に伝え、記録に残す。
+ * 歩いて向かっている途中なら、記録には何も残さない。
+ */
+function endLook(world: RoamWorld, actor: Actor, aborted: boolean, task: Task | null = actor.task): void {
+  if (task?.kind !== 'look' || task.until === null) return;
+  const device = deviceOf(world, task.device) as DeviceDefinition;
+  const seen = cameraPoints(world).map((camera) => ({ camera: camera.name, ids: task.seen[camera.name] ?? [] }));
+  world.happenings.push({
+    type: 'look',
+    t: world.clock,
+    id: actor.id,
+    device: task.device,
+    phase: 'end',
+    ...(aborted ? { aborted: true } : {}),
+    ...(task.device === 'admin' && !aborted ? { counts: adminCounts(world) } : {}),
+    ...(task.device === 'vitals' && !aborted ? { tags: vitalsTags(world) } : {}),
+    ...(task.device === 'cameras' ? { seen } : {}),
+  });
+  if (aborted) {
+    task.until = null;
+    return;
+  }
+  const reading = lookReading(world, device, task.device, task);
+  task.until = null;
+  stop(actor, reading);
+}
+
+/** 防犯カメラの画面を見ている人に、いま映っているものを伝える（ずんだ餅になった人が新しく映ったら、知らせる）。 */
+function watchCameras(world: RoamWorld): void {
+  for (const id of cameraWatchers(world)) {
+    const actor = actorById(world, id);
+    const task = actor.task as Extract<Task, { kind: 'look' }>;
+    for (const camera of cameraPoints(world)) {
+      const view = cameraView(world, camera).filter((other) => other !== id);
+      const seen = new Set([...(task.seen[camera.name] ?? []), ...view]);
+      task.seen[camera.name] = world.roster.filter((other) => seen.has(other));
+      for (const other of view) {
+        if (playerById(world, other).status !== 'asleep' || task.noticed.includes(other)) continue;
+        task.noticed.push(other);
+        actor.events.push(`防犯カメラ（${camera.name}）に、ずんだ餅になった ${nameOf(world, other)} が映っている`);
+      }
+    }
+  }
+}
+
 /**
  * 近くの人にだけ聞こえる声で話す。話せなかった時（話す間がまだ来ていない、抜け道の中、見回りの時間でない）は false。
  * 聞こえた人には、その刻みの観測に入る。話した本人にも、自分の声として入る（誰に聞こえたかは伝えない）。
@@ -615,6 +786,7 @@ function finish(world: RoamWorld, result: GameResult): void {
   // 狐が起きたまま試合が終われば、どちらが勝っても、狐が勝ちを横取りする
   const fox = world.players.some((p) => p.role === 'fox' && p.status === 'awake');
   world.result = fox && result.winner !== 'fox' ? { ...result, winner: 'fox', stolenFrom: result.winner } : result;
+  for (const actor of world.actors) endLook(world, actor, true);
   world.stage = 'over';
   for (const actor of world.actors) {
     actor.task = null;
@@ -644,6 +816,21 @@ function giveNapMochi(world: RoamWorld, actor: Actor, target: Actor): void {
         : `${room} で ${targetName} が急にずんだ餅に変わるのを見た（そばに誰がいたかは見えなかった）`,
     );
   }
+  // 防犯カメラの画面で見ていた人（目の前で見た人は、もう上で数えた）
+  for (const id of cameraWatchers(world)) {
+    if (id === actor.id || id === target.id || witnesses.some((w) => w.id === id)) continue;
+    const watcher = actorById(world, id);
+    const camera = camerasShowing(world, watcher, target.pos)[0];
+    if (!camera) continue;
+    const sawWho = camerasShowing(world, watcher, actor.pos).length > 0;
+    witnesses.push({ id, sawWho, camera: camera.name });
+    watcher.events.push(
+      sawWho
+        ? `防犯カメラ（${camera.name}）に、${byName} が ${targetName} に手をかざし、${targetName} がずんだ餅に変わるのが映った`
+        : `防犯カメラ（${camera.name}）に、${targetName} が急にずんだ餅に変わるのが映った（誰がそばにいたかは映っていなかった）`,
+    );
+  }
+  endLook(world, target, true);
   playerById(world, target.id).status = 'asleep';
   target.task = null;
   target.path = [];
@@ -738,6 +925,15 @@ function noteSneak(world: RoamWorld, actor: Actor, hatch: Hatch, phase: 'in' | '
     if (!canSeePoint(world, watcher, centerOf(hatch))) continue;
     witnesses.push(id);
     watcher.events.push(phase === 'in' ? `${name} が ${hatch.room} の床下の抜け道に入っていくのを見た` : `${name} が ${hatch.room} の床下の抜け道から出てくるのを見た`);
+  }
+  for (const id of cameraWatchers(world)) {
+    if (id === actor.id || witnesses.includes(id)) continue;
+    const camera = camerasShowing(world, actorById(world, id), centerOf(hatch))[0];
+    if (!camera) continue;
+    witnesses.push(id);
+    actorById(world, id).events.push(
+      phase === 'in' ? `防犯カメラ（${camera.name}）に、${name} が床下の抜け道に入っていくのが映った` : `防犯カメラ（${camera.name}）に、${name} が床下の抜け道から出てくるのが映った`,
+    );
   }
   world.happenings.push({ type: 'sneak', t: world.clock, id: actor.id, phase, room: hatch.room, hatch: hatch.id, witnesses });
 }
@@ -860,6 +1056,12 @@ export function stepRoam(world: RoamWorld): void {
         const entry = hatchOf(world, task.from);
         if (!routeTo(world, actor, entry)) stop(actor, `戸が閉まっていて、${entry.room} の出入口へ行けない`);
       }
+    } else if (task?.kind === 'look' && task.until === null) {
+      if (task.doors !== world.doorsVersion) {
+        task.doors = world.doorsVersion;
+        const device = deviceOf(world, task.device) as DeviceDefinition;
+        if (!routeTo(world, actor, device)) stop(actor, `戸が閉まっていて、${device.room} の「${device.name}」へ行けない`);
+      }
     }
 
     walk(actor, roam.speed * roam.tickSeconds);
@@ -911,8 +1113,19 @@ export function stepRoam(world: RoamWorld): void {
       noteSneak(world, actor, entry, 'in');
       actor.under = true;
       now.until = clock + roam.sneakSeconds;
+    } else if (now.kind === 'look') {
+      if (now.until === null) {
+        if (!isAt(actor.pos, deviceOf(world, now.device) as DeviceDefinition)) continue;
+        now.until = clock + (now.device === 'cameras' ? roam.cameraSeconds : roam.lookSeconds);
+        world.happenings.push({ type: 'look', t: clock, id: actor.id, device: now.device, phase: 'start' });
+      } else if (clock >= now.until - 1e-9) {
+        endLook(world, actor, false);
+      }
     }
   }
+
+  // 防犯カメラの画面を見ている人に、映っているものを伝える
+  watchCameras(world);
 
   // かまどの焚きすぎ: 直す場所の全部に、同時に人がついていれば落ち着く
   if (world.trouble?.kind === 'crisis') {
@@ -962,7 +1175,12 @@ export function stepRoam(world: RoamWorld): void {
         const watcher = actorById(world, other);
         return other !== id && other !== task.targetId && !watcher.nibbler && isAwake(world, other) && canSee(world, watcher, actor);
       });
-      if (watched) continue;
+      // 防犯カメラの画面で見ている人も、見ている人に数える
+      const onCamera = cameraWatchers(world).some((other) => {
+        const watcher = actorById(world, other);
+        return other !== task.targetId && !watcher.nibbler && camerasShowing(world, watcher, actor.pos).length > 0;
+      });
+      if (watched || onCamera) continue;
     }
     giveNapMochi(world, actor, target);
     const result = decideWinner(world);
@@ -1007,6 +1225,7 @@ export function startMeeting(world: RoamWorld, reporterId: PlayerId, foundId: Pl
     transcript: [],
     outcome: null,
   };
+  for (const actor of world.actors) endLook(world, actor, true);
   world.stage = 'meeting';
   // 集会のあいだに、困りごとは片づき、戸は開く
   world.trouble = null;
@@ -1081,6 +1300,17 @@ export function endMeeting(world: RoamWorld): void {
  * 断る理由の文は、本人の入力と、本人に見えているものだけから作る。
  */
 export function applyRoamIntent(world: RoamWorld, id: PlayerId, intent: { action: string; target: string }): void {
+  const actor = world.actors.find((a) => a.id === id);
+  const before = actor?.task ?? null;
+  try {
+    applyIntent(world, id, intent);
+  } finally {
+    // 道具を見ている途中で、ほかの行動に移った（見えたものは、それまでに伝わった分だけ）
+    if (actor && before?.kind === 'look' && before.until !== null && actor.task !== before) endLook(world, actor, true, before);
+  }
+}
+
+function applyIntent(world: RoamWorld, id: PlayerId, intent: { action: string; target: string }): void {
   if (world.stage !== 'roam') throw new RuleViolation('not_roaming', 'いまは歩き回る時間ではありません');
   if (!isAwake(world, id)) throw new RuleViolation('not_active', 'いまは動けません');
   const actor = actorById(world, id);
@@ -1146,6 +1376,19 @@ export function applyRoamIntent(world: RoamWorld, id: PlayerId, intent: { action
       current.auto = !named;
     } else {
       actor.task = { kind: 'fix', point: point.id, workLeft: null, doors: -1, auto: !named };
+      actor.path = [];
+    }
+  } else if (action === 'check') {
+    const kind = deviceKindByName(world, target);
+    if (!kind) throw new RuleViolation('unknown_device', 'その名前の道具は、この工房にありません');
+    const current = actor.task;
+    if (current?.kind === 'look' && current.device === kind) {
+      // もう見ている（向かっている）なら、そのまま続ける。防犯カメラは、見る時間をのばす
+      if (kind === 'cameras' && current.until !== null) current.until = Math.max(current.until, world.clock + world.roam.cameraSeconds);
+    } else {
+      const device = deviceOf(world, kind) as DeviceDefinition;
+      if (!findRoute(world.map, actor.pos, centerOf(device))) throw new RuleViolation('no_path', 'いまは、そこへ行く道がありません');
+      actor.task = { kind: 'look', device: kind, until: null, doors: -1, seen: {}, noticed: [] };
       actor.path = [];
     }
   } else if (action === 'call_meeting') {
@@ -1216,6 +1459,10 @@ function describeTask(world: RoamWorld, actor: Actor): string {
     return point.for === 'lights' ? `${point.room} の「${point.name}」で、あかりを直している` : `${point.room} の「${point.name}」についている（ほかの場所にも人がつくのを待っている）`;
   }
   if (task.kind === 'bell') return '中庭の鐘を鳴らしに向かっている';
+  if (task.kind === 'look') {
+    const device = deviceOf(world, task.device) as DeviceDefinition;
+    return task.until === null ? `${device.room} の「${device.name}」を見に向かっている` : `${device.room} の「${device.name}」を見ている`;
+  }
   if (task.kind === 'sneak') {
     return task.until === null ? `${hatchOf(world, task.from).room} の抜け道の出入口へ向かっている` : `床下の抜け道を、${hatchOf(world, task.to).room} へ進んでいる`;
   }
@@ -1243,7 +1490,8 @@ export function buildRoamObservation(world: RoamWorld, id: PlayerId): RoamObserv
     visible: visibleTo(world, id).map((other) => {
       const seen = actorById(world, other);
       const asleep = playerById(world, other).status === 'asleep';
-      return { name: nameOf(world, other), where: areaAt(world.map, seen.pos), asleep, working: !asleep && isWorking(seen) };
+      const looking = asleep ? null : lookingAt(world, seen);
+      return { name: nameOf(world, other), where: areaAt(world.map, seen.pos), asleep, working: !asleep && isWorking(seen), ...(looking ? { checking: looking } : {}) };
     }),
     duties: actor.duties.map((duty) => ({ name: duty.name, steps: duty.steps.map((step) => ({ what: step.what, room: step.room, done: step.done })) })),
     taskBar: world.taskTotal > 0 ? { done: world.taskDone, total: world.taskTotal } : null,
@@ -1264,6 +1512,23 @@ export function buildRoamObservation(world: RoamWorld, id: PlayerId): RoamObserv
       ? { waitSeconds: wait(world.sabotageReadyAt), doorWaitSeconds: wait(world.doorReadyAt), doorRooms: Object.keys(world.map.doorTiles) }
       : null,
     hatches: actor.nibbler ? [...hatchGroups].map(([group, rooms]) => ({ group, rooms })) : null,
+    devices: (['admin', 'vitals', 'cameras'] as const).flatMap((kind) => {
+      const device = deviceOf(world, kind);
+      return device ? [{ kind, name: device.name, room: device.room }] : [];
+    }),
+    cameraView:
+      actor.task?.kind === 'look' && actor.task.device === 'cameras' && actor.task.until !== null
+        ? cameraPoints(world).map((camera) => ({
+            place: camera.name,
+            seen: cameraView(world, camera)
+              .filter((other) => other !== id)
+              .map((other) => ({ name: nameOf(world, other), asleep: playerById(world, other).status === 'asleep' })),
+          }))
+        : null,
+    // 赤いランプのついた防犯カメラのうち、本人から見えているもの（ほかの誰かが画面を見ている）
+    cameraLit: cameraWatchers(world).some((other) => other !== id)
+      ? cameraPoints(world).filter((camera) => canSeePoint(world, actor, centerOf(camera))).map((camera) => camera.name)
+      : [],
     events: [...actor.events],
     heard: actor.heard.map((h) => ({ ...h })),
     chatWaitSeconds: wait(actor.chatReadyAt),

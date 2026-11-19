@@ -4,7 +4,7 @@
 import { Agent } from '../../agents/src/index.ts';
 import type { ActHooks, ActResult, Brain } from '../../agents/src/index.ts';
 import { ROLE_LABEL, SIDE_LABEL, SKIP_VOTE } from '../../protocol/src/index.ts';
-import type { Absence, AnyIntent, BondView, IntentSource, Role, Side, SuspicionEntry } from '../../protocol/src/index.ts';
+import type { Absence, AnyIntent, BondView, DeviceKind, IntentSource, Role, Side, SuspicionEntry } from '../../protocol/src/index.ts';
 import { applyBallots, applySpeak, buildCeremonyObservation, buildObservation, currentSpeaker, nameOf, playerById, seatIdByName } from '../../sim/src/index.ts';
 import type { Ballot, CeremonyPhase, GameResult, MapDefinition, MeetingConfig, MeetingWorld, PlayerId, RoamConfig } from '../../sim/src/index.ts';
 import { Journal } from './journal.ts';
@@ -33,7 +33,7 @@ export type RoamEvent =
   /** 見回りの間に、近くの人にだけ聞こえる声で話した。heard は聞こえた人（観戦者とログのため。本人たちには渡さない）。 */
   | { type: 'chat'; t: number; speaker: string; say: string; heard: string[] }
   /** 人がずんだ餅に変えられた（type の名前は前の題材のなごり）。witnesses の sawWho が false の人は、餅に変わるところだけを見た。 */
-  | { type: 'nap'; t: number; by: string; target: string; room: string; witnesses: { name: string; sawWho: boolean }[] }
+  | { type: 'nap'; t: number; by: string; target: string; room: string; witnesses: { name: string; sawWho: boolean; camera?: string }[] }
   /** 仕込みの手順が1つ終わった。pretend はふりだけ（進み具合は増えない。妖精と妖精びいき）。spirit は、ずんだ餅になった従業員が心だけで進めた分。 */
   | { type: 'task'; t: number; agent: string; duty: string; what: string; station: string; pretend: boolean; spirit: boolean; done: number; total: number }
   /** 妨害。what が door のとき room はその部屋、seconds は閉まっている秒数。crisis の seconds は猶予。 */
@@ -43,6 +43,21 @@ export type RoamEvent =
   /** 床下の抜け道の出入り。witnesses は、それを見ていた人。 */
   | { type: 'sneak'; t: number; by: string; phase: 'in' | 'out'; room: string; hatch: string; witnesses: string[] }
   | { type: 'bell'; t: number; by: string }
+  /**
+   * 工房の道具を見た（見取り図の盤・名札かけ・防犯カメラの画面）。start は見始め、end は見終わり（aborted は途中でやめた）。
+   * end には、見えたもの: counts は部屋ごとの人数、tags は全員の名札、seen はカメラごとに映った人（防犯カメラは、途中でやめても入る）。
+   */
+  | {
+      type: 'look';
+      t: number;
+      agent: string;
+      device: DeviceKind;
+      phase: 'start' | 'end';
+      aborted?: boolean;
+      counts?: Record<string, number>;
+      tags?: { name: string; status: 'awake' | 'asleep' | 'sent_home' }[];
+      seen?: { camera: string; names: string[] }[];
+    }
   /** kind が bell のときは、中庭の鐘で集まった（found と room は null）。 */
   | { type: 'meeting_start'; t: number; meeting: number; kind: 'report' | 'bell'; reason: string; reporter: string; found: string | null; room: string | null; attendees: string[]; absent: Absence[] }
   /** tasks は終わった時の仕込みの数（集会でクビになった人の残りが減って、そのまま終わることがある）。 */
