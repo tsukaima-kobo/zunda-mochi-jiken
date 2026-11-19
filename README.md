@@ -2,6 +2,7 @@
 
 開店前のずんだ餅工房。11人の丸いずんだ餅の従業員にまぎれて、人をずんだ餅に変えてしまう「ずんだの妖精」がひそんでいます。
 働きながら手がかりを集め、集会で話し合い、投票で妖精を見つけ出す、人狼のような正体隠しゲームです。
+Among Us をモチーフにして作りました（Innersloth とは関係ありません）。
 
 このリポジトリの版では、11人ともボット（台本どおりに動くプログラム）が遊びます。あなたは観戦するだけです。
 試合はブラウザの中で作られるので、サーバーも AI も要りません。
@@ -110,6 +111,7 @@ MIT License（[LICENSE](LICENSE)）。登場人物・絵・効果音もすべて
 
 It's early morning at a zunda mochi workshop, before the shop opens. Hidden among the 11 round mochi workers are "zunda fairies", who turn people into zunda mochi.
 The workers do their jobs, gather clues, talk it over at meetings, and vote to find the fairies. It is a social deduction game in the spirit of Werewolf.
+It is inspired by Among Us, and is not affiliated with Innersloth.
 
 In this version, all 11 players are bots (programs that follow a script). You only watch.
 Each match is generated inside your browser, so no server and no AI are needed.
