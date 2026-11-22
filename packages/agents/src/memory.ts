@@ -116,7 +116,8 @@ export class AgentMemory {
       else this.talk.push(`${at} ${voice.speaker}（${voice.where ?? '姿は見えなかった'}）「${voice.text}」`);
     }
     if (obs.lastResult && obs.lastResult !== before?.lastResult) {
-      this.note(`${at} ${obs.lastResult}`, obs.lastResult.includes('をずんだ餅に変えた') || DEVICE_READING.test(obs.lastResult));
+      // 占いの結果も、集会で使う大事な手がかりなので残す
+      this.note(`${at} ${obs.lastResult}`, obs.lastResult.includes('をずんだ餅に変えた') || obs.lastResult.includes('を占った: ') || DEVICE_READING.test(obs.lastResult));
     }
     this.previous = obs;
   }

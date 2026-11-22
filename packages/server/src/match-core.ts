@@ -18,7 +18,8 @@ export interface MeetingResult {
 }
 
 export type MeetingEvent =
-  | { type: 'speak'; meeting: number; round: number; speaker: string; say: string; thought: string; suspect: string; source: IntentSource; brain: string; latencyMs: number }
+  /** respoken: 上映の編集で、あとから同じ問いを同じ AI に聞き直した答えに替えた発言（edits.json の respeak）。試合の記録には付かない。 */
+  | { type: 'speak'; meeting: number; round: number; speaker: string; say: string; thought: string; suspect: string; source: IntentSource; brain: string; latencyMs: number; respoken?: boolean }
   /** memo は本人の記憶にだけ残る覚え書き、suspicion は疑い度（0〜5、席順）。どちらも観戦者にだけ見せる。古い記録には suspicion が無い。 */
   | { type: 'vote'; meeting: number; voter: string; vote: string; thought: string; memo: string; suspicion?: SuspicionEntry[]; source: IntentSource; brain: string; latencyMs: number }
   /** 朝礼（greet: 最初の見回りの前）・日記（diary）・感想会（review）。日記と感想会は試合のあと（game_over より後ろ）。 */
@@ -31,11 +32,13 @@ export type RoamEvent =
   /** t は意図を適用した時刻（秒）。applied が false なら、適用の時点で断られた（note に理由）。 */
   | { type: 'decide'; t: number; agent: string; action: string; target: string; thought: string; say?: string; source: IntentSource; brain: string; latencyMs: number; applied: boolean; note: string | null }
   /** 見回りの間に、近くの人にだけ聞こえる声で話した。heard は聞こえた人（観戦者とログのため。本人たちには渡さない）。 */
-  | { type: 'chat'; t: number; speaker: string; say: string; heard: string[] }
+  // keep / mute: 上映の編集（edits.json）で、必ず声にする / 声にしない雑談。keep の数が大きいほど、同じ瞬間の声の中で先に鳴らす
+  | { type: 'chat'; t: number; speaker: string; say: string; heard: string[]; keep?: number; mute?: boolean }
   /** 人がずんだ餅に変えられた（type の名前は前の題材のなごり）。witnesses の sawWho が false の人は、餅に変わるところだけを見た。 */
   | { type: 'nap'; t: number; by: string; target: string; room: string; witnesses: { name: string; sawWho: boolean; camera?: string }[] }
-  /** 仕込みの手順が1つ終わった。pretend はふりだけ（進み具合は増えない。妖精と妖精びいき）。spirit は、ずんだ餅になった従業員が心だけで進めた分。 */
-  | { type: 'task'; t: number; agent: string; duty: string; what: string; station: string; pretend: boolean; spirit: boolean; done: number; total: number }
+  /** 仕込みの手順が1つ終わった。pretend はふりだけ（進み具合は増えない。妖精と妖精マニア）。spirit は、ずんだ餅になった従業員が心だけで進めた分。 */
+  /** fox: 狐の分だけ。狐自身の仕込みの進み（横取りの条件。2026-11-21 から）。 */
+  | { type: 'task'; t: number; agent: string; duty: string; what: string; station: string; pretend: boolean; spirit: boolean; done: number; total: number; fox?: { done: number; need: number } }
   /** 妨害。what が door のとき room はその部屋、seconds は閉まっている秒数。crisis の seconds は猶予。 */
   | { type: 'sabotage'; t: number; by: string; what: 'lights' | 'crisis' | 'door'; room: string | null; seconds: number | null }
   | { type: 'fixed'; t: number; what: 'lights' | 'crisis'; by: string[] }
@@ -43,6 +46,13 @@ export type RoamEvent =
   /** 床下の抜け道の出入り。witnesses は、それを見ていた人。 */
   | { type: 'sneak'; t: number; by: string; phase: 'in' | 'out'; room: string; hatch: string; witnesses: string[] }
   | { type: 'bell'; t: number; by: string }
+  /**
+   * 占い師が占った。fairy: 妖精だった。cursed: 占われた狐が、その場でずんだ餅に変わった（witnesses は、餅に変わるところを見た人）。
+   * 結果を知っているのは占い師だけ（観戦者とログのための記録）。
+   */
+  | { type: 'divine'; t: number; by: string; target: string; room: string; fairy: boolean; cursed: boolean; witnesses: { name: string; camera?: string }[] }
+  /** 妖精が狐に手をかざしたが、狐はずんだ餅にならなかった（2026-11-21 から）。 */
+  | { type: 'nap_failed'; t: number; by: string; target: string; room: string; witnesses: { name: string; camera?: string }[] }
   /**
    * 工房の道具を見た（見取り図の盤・名札かけ・防犯カメラの画面）。start は見始め、end は見終わり（aborted は途中でやめた）。
    * end には、見えたもの: counts は部屋ごとの人数、tags は全員の名札、seen はカメラごとに映った人（防犯カメラは、途中でやめても入る）。
@@ -61,7 +71,7 @@ export type RoamEvent =
   /** kind が bell のときは、中庭の鐘で集まった（found と room は null）。 */
   | { type: 'meeting_start'; t: number; meeting: number; kind: 'report' | 'bell'; reason: string; reporter: string; found: string | null; room: string | null; attendees: string[]; absent: Absence[] }
   /** tasks は終わった時の仕込みの数（集会でクビになった人の残りが減って、そのまま終わることがある）。 */
-  | { type: 'game_over'; t: number; winner: Role; why: GameResult['why']; stolenFrom?: Side; tasks?: { done: number; total: number } };
+  | { type: 'game_over'; t: number; winner: Role; why: GameResult['why']; stolenFrom?: Side; foxMissed?: { done: number; need: number }; tasks?: { done: number; total: number } };
 
 export type MatchEvent = MeetingEvent | RoamEvent;
 
@@ -90,11 +100,33 @@ export interface MatchLog {
   truth: Record<string, string>;
   reason: string;
   seats: string[];
+  /**
+   * 続けて流す動画の中の位置（上映の編集 edits.json で付ける。試合の記録そのものには無い）。
+   * part / of: 何試合目か・全部で何試合か。efforts: 試合ごとの「AI の考える深さ」（low・medium など）。
+   * next: 最後の試合のあとの次回予告の印。promo: 締めのあとに、お知らせが続く。
+   * episode: シリーズの何本目か（1本目は無い）。
+   */
+  series?: { part: number; of: number; efforts?: string[]; next?: string; promo?: boolean; episode?: number };
+  /**
+   * 上映の編集で決めた、冒頭のダイジェスト（edits.json の digest）。
+   * lines: 集会の発言。書いた順に見せる。無ければ、決まりで1つ選ぶ。
+   * nap: 餅に変える所を、どれにするか（誰が誰を）。無ければ、決まりで選ぶ。
+   * seen: 抜け道から出てくる所を見られた瞬間を、餅に変える所のあとに足す（誰が出てきたか）。
+   */
+  digest?: { lines?: { speaker: string; meeting: number; starts: string; label?: string }[]; nap?: { by: string; target: string }; seen?: { by: string }; sweet?: boolean };
+  /** 上映の編集で足した、開票の時の案内役の補足（edits.json の asides）。票の札が開いている間に言う。票そのものは変えない。 */
+  asides?: { meeting: number; text: string }[];
+  /**
+   * 上映の編集で、手で書き直した案内（edits.json の narration・callouts）。勝ち負け・票・行動は変えない。案内役の言葉だけを替える。
+   * lines: 場面の言葉（キーは moves:3・doubt:2・marks:1・result など。台本の案内にある場面だけ）。
+   * callouts: 試合の中の一言（キーは nap:<出来事の番号>・call:<集会>・tally:<集会>・verdict:<集会>・end、または一言の印 inaba など）。null は言わない。
+   */
+  rewrites?: { lines?: Record<string, string[]>; callouts?: Record<string, string | null> };
   events: MatchEvent[];
   /** 会議だけの版の結果。 */
   outcome: (MeetingResult & { winner: Side }) | null;
   /** 試合の版の結果。clock は終わった時刻（歩き回った秒数）。 */
-  result: { winner: Side; why: GameResult['why']; stolenFrom?: Side; clock: number; rounds: number; meetings: number } | null;
+  result: { winner: Side; why: GameResult['why']; stolenFrom?: Side; foxMissed?: { done: number; need: number }; clock: number; rounds: number; meetings: number } | null;
   stats: {
     byBrain: Record<string, BrainStats>;
     sources: Record<IntentSource, number>;
@@ -105,7 +137,7 @@ export interface MatchLog {
    * 歩き回りの記録（mode が match のとき）。r は何回目の見回りか、pos は名簿順に [x0, y0, x1, y1, …]、
    * st は名簿順の1文字ずつ（a: 起きている / w: 持ち場で手を動かしている / u: 床下の抜け道の中 / z: ずんだ餅になっている / x: 工房にいない）。
    * gp は、心だけになって仕込みを続けている人の位置（名簿順に [x0, y0, …]。いない人は -1）。誰もいなければ省く。
-   * taskTotal は、始まった時の、従業員の仕込みの手順の数。steps は、名簿順の、1人ずつの手順の数（妖精と妖精びいきの分は見せかけ）。
+   * taskTotal は、始まった時の、従業員の仕込みの手順の数。steps は、名簿順の、1人ずつの手順の数（妖精と妖精マニアの分は見せかけ）。
    */
   roam?: { config: RoamConfig; map: MapDefinition; taskTotal: number; steps: number[]; frames: { r: number; t: number; pos: number[]; st: string; gp?: number[] }[] };
 }
@@ -114,6 +146,8 @@ export interface CommonRunOptions {
   seed: number;
   /** 席順に、循環して割り当てる。null は台本ボット。 */
   brains: readonly (Brain | null)[];
+  /** 登場人物の名前ごとの頭脳（席は種で入れ替わるので、キャラと AI を固定する時はこちら）。名前が載っていれば brains より優先。 */
+  brainsByName?: Readonly<Record<string, Brain | null>>;
   denyList: readonly string[];
   now?: () => Date;
   onEvent?: (event: MatchEvent) => void;
@@ -139,7 +173,8 @@ export class Match {
     this.onEvent = options.onEvent;
 
     world.roster.forEach((id, seat) => {
-      const brain = options.brains[seat % options.brains.length] ?? null;
+      const name = nameOf(world, id);
+      const brain = options.brainsByName && name in options.brainsByName ? (options.brainsByName[name] ?? null) : (options.brains[seat % options.brains.length] ?? null);
       this.agents.set(id, new Agent({ brain, seed: options.seed * 1000 + seat, denyList: options.denyList }));
     });
 
@@ -165,7 +200,7 @@ export class Match {
       events: [],
       outcome: null,
       result: null,
-      stats: { byBrain: {}, sources: { brain: 0, retry: 0, trimmed: 0, fallback: 0 }, fallbackByRole: { artisan: 0, nibbler: 0, madman: 0, fox: 0 } },
+      stats: { byBrain: {}, sources: { brain: 0, retry: 0, trimmed: 0, fallback: 0 }, fallbackByRole: { artisan: 0, nibbler: 0, madman: 0, fox: 0, seer: 0 } },
     };
     this.journal.append({ type: 'match_start', matchId, seed: options.seed, config: world.config, players: this.log.players });
     options.onStart?.(this.log);
@@ -311,7 +346,7 @@ export const WHY_LABEL: Record<GameResult['why'], string> = {
 };
 
 export function describeOutcome(log: MatchLog): string {
-  const win = (side: Side) => `${SIDE_LABEL[side]}の勝ち${side === 'nibbler' && log.truth.madman ? '（妖精びいきも勝ち）' : ''}`;
+  const win = (side: Side) => `${SIDE_LABEL[side]}の勝ち${side === 'nibbler' && log.truth.madman ? '（妖精マニアも勝ち）' : ''}`;
   if (log.result?.stolenFrom) return `${WHY_LABEL[log.result.why]} → ${SIDE_LABEL[log.result.stolenFrom]}の勝ち…のはずが、狐が起きていたので狐の勝ち`;
   if (log.result) return `${WHY_LABEL[log.result.why]} → ${win(log.result.winner)}`;
   if (!log.outcome) return '途中で止まりました（利用枠切れ）。';

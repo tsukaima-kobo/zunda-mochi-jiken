@@ -3,7 +3,7 @@
 
 import { NO_SUSPECT, SKIP_VOTE } from '../../protocol/src/index.ts';
 import type { MeetingObservation } from '../../protocol/src/index.ts';
-import { castOf, nameOf, playerById } from './world.ts';
+import { castOf, foxesOutOf, nameOf, playerById } from './world.ts';
 import type { MeetingWorld, PlayerId, PlayerTruth } from './world.ts';
 
 export function buildObservation(world: MeetingWorld, agentId: PlayerId): MeetingObservation {
@@ -12,7 +12,7 @@ export function buildObservation(world: MeetingWorld, agentId: PlayerId): Meetin
   if (!meeting.seats.includes(agentId)) throw new Error('会議に出ていない人の観測は作れません');
   if (meeting.phase === 'done') throw new Error('会議は終わっています');
 
-  // 妖精どうしだけが互いを知る。従業員と妖精びいきには、誰の役職も渡さない（人数だけは全員が知っている）。
+  // 妖精どうしだけが互いを知る。従業員と妖精マニアには、誰の役職も渡さない（人数だけは全員が知っている）。
   const allies =
     me.role === 'nibbler'
       ? world.players.filter((p) => p.role === 'nibbler' && p.id !== agentId).map((p) => p.name)
@@ -29,8 +29,9 @@ export function buildObservation(world: MeetingWorld, agentId: PlayerId): Meetin
   return {
     kind: 'meeting',
     phase: meeting.phase,
-    self: { name: me.name, role: me.role, persona: me.persona, style: me.style, allies, bonds: me.bonds ?? [] },
+    self: { name: me.name, role: me.role, persona: me.persona, style: me.style, allies, bonds: me.bonds ?? [], ...(me.role === 'seer' ? { divined: [...(me.divined ?? [])] } : {}), ...(me.role === 'fox' && me.foxWork ? { foxWork: { ...me.foxWork } } : {}) },
     facts: [...me.facts],
+    ...foxesOutOf(world),
     history: [...world.history],
     cast,
     stakes: { awake, fairiesLeft, lastChance: fairiesLeft > 0 && awake <= fairiesLeft * 2 + 1 },

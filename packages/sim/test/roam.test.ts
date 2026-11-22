@@ -242,7 +242,53 @@ describe('ずんだ餅に変える', () => {
   });
 });
 
+/** 知らせに向かった人が、餅のすぐそば（reportRange）に着いて、集会になるまで進める。着いた時の距離も確かめる。 */
+function walkToReport(w: RoamWorld, finder: PlayerId, victim: PlayerId): void {
+  const far = () => Math.hypot(actorById(w, finder).pos.x - actorById(w, victim).pos.x, actorById(w, finder).pos.y - actorById(w, victim).pos.y);
+  expect(far()).toBeGreaterThan(w.roam.reportRange);
+  for (let i = 0; i < 400 && w.stage === 'roam'; i++) stepRoam(w);
+  expect(w.stage).toBe('meeting');
+  expect(far()).toBeLessThanOrEqual(w.roam.reportRange);
+}
+
 describe('発見と集会', () => {
+  it('餅のすぐそばにいれば、その場で知らせられる。知らせに向かう途中でほかの行動を選ぶと、知らせない', () => {
+    const near = stage();
+    applyRoamIntent(near.w, near.nibbler, { action: 'transform', target: name(near.w, near.victim) });
+    run(near.w, 1);
+    const spot = actorById(near.w, near.victim).pos;
+    actorById(near.w, near.rest[0]!).pos = { x: spot.x + 1, y: spot.y };
+    applyRoamIntent(near.w, near.rest[0]!, { action: 'report', target: name(near.w, near.victim) });
+    expect(near.w.stage).toBe('meeting');
+
+    const away = stage();
+    applyRoamIntent(away.w, away.nibbler, { action: 'transform', target: name(away.w, away.victim) });
+    run(away.w, 1);
+    const finder = away.rest[0]!;
+    actorById(away.w, finder).pos = centerOf({ x: 17, y: 3 });
+    applyRoamIntent(away.w, finder, { action: 'report', target: name(away.w, away.victim) });
+    applyRoamIntent(away.w, finder, { action: 'wait', target: 'なし' });
+    run(away.w, 100);
+    expect(away.w.stage).toBe('roam');
+  });
+
+  it('考え始めた時に見えていた餅なら、考えている間に通りすぎても知らせられる（見ていなければ知らせられない）', () => {
+    const { w, nibbler, victim, rest } = stage();
+    applyRoamIntent(w, nibbler, { action: 'transform', target: name(w, victim) });
+    run(w, 1);
+    const [finder, stranger] = [rest[0]!, rest[1]!];
+    // finder はいま餅が見えていない。考え始めた時に見えていた（sawAsleep に入っている）なら、知らせられる
+    expect(visibleTo(w, finder)).not.toContain(victim);
+    expect(() => applyRoamIntent(w, stranger, { action: 'report', target: name(w, victim) }, { sawAsleep: [] })).toThrow(/いま見えていません/);
+    applyRoamIntent(w, finder, { action: 'report', target: name(w, victim) }, { sawAsleep: [name(w, victim)] });
+    // 2026-11-22 から、餅のすぐそばまで歩いてから知らせる（その場では、まだ集会にならない）
+    expect(w.stage).toBe('roam');
+    expect(buildRoamObservation(w, finder).activity).toContain('知らせに向かっている');
+    walkToReport(w, finder, victim);
+    expect(w.meeting.reporterId).toBe(finder);
+    expect(w.found?.id).toBe(victim);
+  });
+
   it('ずんだ餅になった人が見えていれば知らせられ、起きている全員が集まる', () => {
     const { w, nibbler, victim, rest } = stage();
     applyRoamIntent(w, nibbler, { action: 'transform', target: name(w, victim) });
@@ -251,7 +297,9 @@ describe('発見と集会', () => {
     expect(() => applyRoamIntent(w, finder, { action: 'report', target: name(w, victim) })).toThrow(/いま見えていません/);
     actorById(w, finder).pos = centerOf({ x: 17, y: 3 });
     applyRoamIntent(w, finder, { action: 'report', target: name(w, victim) });
-    expect(w.stage).toBe('meeting');
+    // 見えているだけでは、まだ知らせられない。餅のすぐそばまで歩いた所で、集会になる
+    expect(w.stage).toBe('roam');
+    walkToReport(w, finder, victim);
     expect(w.meeting).toMatchObject({
       index: 1,
       reason: `${name(w, finder)} が 倉庫 で、ずんだ餅になった ${name(w, victim)} を見つけて、鐘を鳴らした`,
@@ -295,7 +343,7 @@ describe('発見と集会', () => {
     // 誰が誰に入れたかは、投票のあとで全員に明かされる（席順）。役職の名前は残さない（妖精だったかどうかだけ）
     expect(obs.history[0]).toContain(`${name(w, wrong)}→スキップ`);
     expect(obs.history[0]).toContain(`${name(w, nibbler)}→${name(w, wrong)}`);
-    expect(obs.history[0]).not.toMatch(/従業員|妖精びいき|ずんだの妖精/);
+    expect(obs.history[0]).not.toMatch(/従業員|妖精マニア|ずんだの妖精/);
     // 見回りの初めは、また渡せるまで待つ
     expect(buildRoamObservation(w, nibbler).napCooldown).toBe(0); // この試験では待ち時間を 0 にしている
   });

@@ -19,6 +19,7 @@ export type {
 } from './world.ts';
 export { areaAt, centerOf, DEVICE_KINDS, findPath, findRoute, findRouteThroughDoors, hasLineOfSight, isWalkable, parseMap, tileOf } from './map.ts';
 export type { CameraPoint, DeviceDefinition, DeviceKind, DutyDefinition, FixPoint, GameMap, Hatch, MapDecor, MapDefinition, MapDevices, MapSettings, Point, Station } from './map.ts';
+export type { IntentContext } from "./roam.ts";
 export { actorById, actorMark, applyRoamIntent, awakeIds, buildRoamObservation, CHAT_MAX_CHARS, createRoamWorld, DEFAULT_ROAM_CONFIG, endMeeting, isWorking, noteRejection, speakAloud, startMeeting, stepRoam, tickOrder, UNDER_FLOOR, visibleTo } from './roam.ts';
 export type { Actor, Duty, DutyStep, GameResult, Happening, Incident, RoamConfig, RoamWorld, RoamWorldOptions, Spirit, Trouble } from './roam.ts';
 export type { MeetingWorld } from './world.ts';

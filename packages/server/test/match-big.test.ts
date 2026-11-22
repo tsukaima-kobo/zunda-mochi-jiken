@@ -15,7 +15,7 @@ const count = (log: MatchLog, type: string) => log.events.filter((e) => e.type =
 
 /**
  * プロンプトとスキーマだけを見て試合を進める頭脳。受け取った要求は全部覚えておく。
- * 従業員と妖精びいきは仕込みを進め、困りごとは直しに行き、ずんだ餅になった人を見たら知らせる。
+ * 従業員と妖精マニアは仕込みを進め、困りごとは直しに行き、ずんだ餅になった人を見たら知らせる。
  * 妖精（スキーマに専用の行動がある）は、見えている相手をずんだ餅に変え、ときどき妨害し、抜け道を使う。
  */
 class BusyBrain implements Brain {
@@ -61,7 +61,7 @@ describe('広い工房・11人の試合', () => {
     expect(first).toMatchObject({ mode: 'match', status: 'finished' });
     expect(first.players.filter((p) => p.role === 'nibbler')).toHaveLength(2);
     expect(first.truth.nibbler?.split('、')).toHaveLength(2);
-    // 2026-11-18 から、妖精びいきの代わりに狐が1人
+    // 2026-11-18 から、妖精マニアの代わりに狐が1人
     expect(first.players.filter((p) => p.role === 'madman')).toHaveLength(0);
     expect(first.players.filter((p) => p.role === 'fox')).toHaveLength(1);
     expect(first.truth.fox?.split('、')).toHaveLength(1);
@@ -162,10 +162,15 @@ describe('広い工房・11人の試合', () => {
       // 勝敗の理由が、記録と合っている
       const awake = log.players.filter((p) => !asleep.has(p.name) && !home.has(p.name));
       const awakeNibblers = awake.filter((p) => p.role === 'nibbler').length;
-      // 妖精びいきと狐は人間の側に数える。狐が起きたまま終われば、勝ちは狐（理由は、本来の終わり方のまま）
-      const foxAwake = awake.some((p) => p.role === 'fox');
-      expect(result.winner === 'fox', label).toBe(foxAwake);
-      if (foxAwake) expect(result.stolenFrom, label).toBeDefined();
+      // 妖精マニアと狐は人間の側に数える。狐が、自分の仕込みを決まった数だけ終えて起きたまま終われば、勝ちは狐（理由は、本来の終わり方のまま）。
+      // 起きていても仕込みが足りなければ、横取りできない（foxMissed。2026-11-21 から）
+      const foxAwake = awake.find((p) => p.role === 'fox');
+      const foxDone = foxAwake ? log.events.filter((e) => e.type === 'task' && e.agent === foxAwake.name).length : 0;
+      const foxNeed = log.roam!.config.foxSteps;
+      expect(result.winner === 'fox', label).toBe(!!foxAwake && foxDone >= foxNeed);
+      if (result.winner === 'fox') expect(result.stolenFrom, label).toBeDefined();
+      if (foxAwake && foxDone < foxNeed) expect(result.foxMissed, label).toEqual({ done: foxDone, need: foxNeed });
+      else expect(result.foxMissed, label).toBeUndefined();
       const awakeHumans = awake.length - awakeNibblers;
       expect(awakeNibblers === 0, label).toBe(result.why === 'nibbler_sent_home');
       if (result.why !== 'nibbler_sent_home') expect(awakeHumans <= awakeNibblers, label).toBe(result.why === 'outnumbered');
@@ -176,8 +181,11 @@ describe('広い工房・11人の試合', () => {
       if (result.why === 'crisis') expect(result.clock - (trouble?.t ?? Infinity), label).toBeCloseTo(log.roam!.config.crisisSeconds, 5);
       expect(result.why, label).not.toBe('opened');
     }
-    expect(wins.artisan).toBeGreaterThan(30);
-    expect(wins.nibbler).toBeGreaterThan(30);
+    // 2026-11-21 から、狐には妖精の手が効かない。台本ボットは狐を探さないので、妖精の勝ちは減り、狐の勝ちが増える（150試合で妖精12）。
+    // 台本ボットの狐は、前は「手をかざされた」を見たこととして集会で話していた。それが無くなり、従業員の勝ちが減った（150試合で従業員11・妖精33・狐106）
+    expect(wins.artisan, JSON.stringify(wins)).toBeGreaterThan(5);
+    expect(wins.nibbler, JSON.stringify(wins)).toBeGreaterThan(5);
+    expect(wins.fox, JSON.stringify(wins)).toBeGreaterThan(5);
     for (const why of ['nibbler_sent_home', 'outnumbered', 'tasks_done']) expect([...whys]).toContain(why);
     for (const kind of ['task', 'sabotage:lights', 'sabotage:crisis', 'sabotage:door', 'fixed', 'door_open', 'sneak', 'nap', 'meeting_start']) expect([...kinds]).toContain(kind);
   }, 180_000);
@@ -220,7 +228,7 @@ describe('広い工房・11人の試合', () => {
         }
         const role = world.players[me]!.role;
         // クビになった人については、妖精だったかどうかしか伝わらない
-        expect(bytes).not.toMatch(/（(従業員|妖精びいき|狐|ずんだの妖精)でした）/);
+        expect(bytes).not.toMatch(/（(従業員|妖精マニア|狐|ずんだの妖精)でした）/);
         if (role !== 'nibbler') {
           expect(bytes).not.toContain('あなたはずんだの妖精です');
           expect(bytes).not.toMatch(/transform|nap|sneak|sabotage|【ずんだ餅に変える力】|【妨害】|【床下の抜け道】|【仲間の妖精】/);
@@ -228,11 +236,14 @@ describe('広い工房・11人の試合', () => {
         }
         if (role === 'artisan') {
           artisans += 1;
-          expect(bytes).not.toMatch(/のふりをし|見せかけ|あなたは妖精びいきです|あなたは狐です/);
+          expect(bytes).not.toMatch(/のふりをし|見せかけ|あなたは妖精マニアです|あなたは狐です/);
         } else if (role === 'fox') {
           foxes += 1;
           expect(bytes).toContain('あなたは狐です');
-          expect(bytes).toContain('【あなたの仕込み（ふりをするための見せかけ）】');
+          // 横取りに仕込みの条件がある試合（既定）では、狐の仕込みは本物（2026-11-21 から）
+          expect(bytes).toContain('【あなたの仕込み（狐の横取りの条件のぶん。従業員みんなの進み具合には入らない）】');
+          expect(bytes).toContain('【狐の仕込みの進み】');
+          expect(bytes).not.toContain('【あなたの仕込み（ふりをするための見せかけ）】');
         } else {
           expect(bytes).not.toContain('あなたは狐です');
           // 妖精も、誰が狐かを知らない（仲間の欄に出ない）
@@ -245,7 +256,7 @@ describe('広い工房・11人の試合', () => {
           expect(bytes).toContain('【あなたの仕込み（ふりをするための見せかけ）】');
         }
         // 座標や内部の名前は、どの頭脳にも渡らない
-        expect(bytes).not.toMatch(/"pos"|"path"|\bp\d{1,2}\b|h-souko|wellwater/);
+        expect(bytes).not.toMatch(/"pos"|"path"|\bp\d{1,2}\b|h-souko|iceblock/);
       });
       expect(artisans).toBe(8);
       expect(foxes).toBe(1);

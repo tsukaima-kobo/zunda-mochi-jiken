@@ -9,7 +9,7 @@ import { DEFAULT_MEETING_CONFIG } from './world.ts';
 import type { MeetingConfig, PlayerId, PlayerTruth, World } from './world.ts';
 
 // 登場人物は packages/protocol/src/cast.ts の前から8人。
-// 乱数の使い方は、仮の名前だったころと同じに保つ（人柄を並べ替えていた所も、空で回す）。
+// 乱数の使い方は変えない（人柄を並べ替えていた所も、空で回す）。
 const MEMBERS = CAST.slice(0, 8);
 const NAMES = MEMBERS.map((member) => member.name);
 const ROOMS = ['蒸し場', '倉庫', '店先', '休憩室', 'あんこ場'];

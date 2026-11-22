@@ -8,13 +8,13 @@ function voteObs(role: MeetingObservation['self']['role'], lastChance: boolean):
   return {
     kind: 'meeting',
     phase: 'vote',
-    self: { name: 'あかね', role, persona: '口調', style: '', allies: [] },
+    self: { name: 'もえぎ', role, persona: '口調', style: '', allies: [] },
     facts: [],
     history: [],
     cast: { total: 11, nibblers: 2, madmen: 1 },
     stakes: { awake: lastChance ? 3 : 7, fairiesLeft: 1, lastChance },
-    meeting: { reason: '鐘', absent: [], round: 2, maxRounds: 2, attendees: ['あかね', 'あおい', 'みどり'], transcript: [] },
-    options: ['あおい', 'みどり', 'スキップ'],
+    meeting: { reason: '鐘', absent: [], round: 2, maxRounds: 2, attendees: ['もえぎ', 'あかね', 'つゆくさ'], transcript: [] },
+    options: ['あかね', 'つゆくさ', 'スキップ'],
     limits: { sayTargetChars: 60, sayMaxChars: 80 },
   };
 }
@@ -28,10 +28,10 @@ describe('最後の局面', () => {
     expect(skip.ok).toBe(false);
     expect(skip.ok ? [] : skip.problems).toContain('last_chance_skip');
     expect(feedbackFor(skip.ok ? [] : skip.problems, obs)).toContain('いちばん怪しい人に入れて');
-    expect(checkIntent(obs, vote('みどり'), []).ok).toBe(true);
+    expect(checkIntent(obs, vote('つゆくさ'), []).ok).toBe(true);
   });
 
-  it('最後の局面でなければ、スキップしてよい。妖精と妖精びいきは、いつでもスキップしてよい', () => {
+  it('最後の局面でなければ、スキップしてよい。妖精と妖精マニアは、いつでもスキップしてよい', () => {
     expect(checkIntent(voteObs('artisan', false), vote('スキップ'), []).ok).toBe(true);
     expect(checkIntent(voteObs('nibbler', true), vote('スキップ'), []).ok).toBe(true);
     expect(checkIntent(voteObs('madman', true), vote('スキップ'), []).ok).toBe(true);

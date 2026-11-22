@@ -83,6 +83,10 @@ export class Agent {
   private startled = false;
   /** そばで誰かが話した（まだそれに返事をする判断をしていない）。 */
   private spokenTo = false;
+  /** 妖精の力（手をかざす力・妨害）が、いま使えるようになった（まだそれを踏まえた判断をしていない）。 */
+  private powerReady = false;
+  /** 前の観測での、手をかざす力と妨害の残り秒数（使えるようになった瞬間を見つけるため） */
+  private powerWait: { nap: number | null; sabotage: number | null } = { nap: null, sabotage: null };
 
   constructor(options: AgentOptions) {
     this.options = options;
@@ -100,12 +104,19 @@ export class Agent {
       this.sleepersAtDecision = new Set();
       this.startled = false;
       this.spokenTo = false;
+      this.powerReady = false;
     }
     // 姿の見えている人の声が聞こえた（雑談に返事をするきっかけ）
     if ((obs.heard ?? []).some((h) => h.speaker !== obs.self.name && h.where !== null)) this.spokenTo = true;
     // 困りごとが片づいた知らせでは、決め直さない（直していた本人は、行動が終わるので決め直す）
     const stirring = obs.events.some((event) => !CALM_EVENT.test(event));
     if (stirring || obs.lastResult?.includes('をずんだ餅に変えた')) this.startled = true;
+    // 2026-11-21 夜 頭脳のある妖精は、手をかざす力か妨害が使えるようになった瞬間に決め直す（本人の待ち時間だけで決まるので、秘密は漏れない）。
+    // 最大15秒おきに呼ぶだけだと、妨害で鐘を止める前に鐘を鳴らされることがあった。台本ボットは前と同じ（ボットの試合の結果を変えない）
+    const nap = obs.napCooldown;
+    const sabotage = obs.sabotage && !obs.trouble ? obs.sabotage.waitSeconds : null;
+    if (this.options.brain && ((nap === 0 && (this.powerWait.nap ?? 0) > 0) || (sabotage === 0 && (this.powerWait.sabotage ?? 0) > 0))) this.powerReady = true;
+    this.powerWait = { nap, sabotage };
   }
 
   /**
@@ -118,6 +129,7 @@ export class Agent {
     // 急ぎ: ずんだ餅になった人を新しく見つけた、目の前で誰かが餅に変わった、自分が変えた直後。間隔を待たずに決め直す
     if (obs.visible.some((v) => v.asleep && !this.sleepersAtDecision.has(v.name))) return 'found_sleeper';
     if (this.startled) return 'startled';
+    if (this.powerReady) return 'power_ready';
     // 名前を呼ばれて、何か聞かれた（答えるために決め直す。続けざまにはしない）
     if (questionFor(obs) && since >= (this.options.replyGap ?? 2)) return 'asked';
     // そばで話しかけられた・誰かが話した。話せる時に、返事をするために決め直す（続けざまにはしない）。
@@ -171,6 +183,7 @@ export class Agent {
     this.sleepersAtDecision = new Set(obs.visible.filter((v) => v.asleep).map((v) => v.name));
     this.startled = false;
     this.spokenTo = false;
+    this.powerReady = false;
     const memory = this.promptMemory();
     return this.ask<RoamDecision>(
       {

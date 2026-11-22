@@ -4,7 +4,7 @@
 // 妖精2人が同じ瞬間に変えた時は、2組を上下に並べる。終わりに白く光らせ、光が引くと、ふだんの絵に戻る。
 
 import { mouthAt } from '../../speech/src/index.ts';
-import { drawActor, sparkle } from './actors.ts';
+import { drawActor, REACH_OUT, REACH_UP, sparkle } from './actors.ts';
 import type { ActorLook } from './actors.ts';
 import type { Cutin } from './show.ts';
 import { CUTIN_VOICE_DELAY } from './sound.ts';
@@ -31,7 +31,8 @@ export interface CutinPair {
   target: CutinPerson;
 }
 
-export function drawCutin(ctx: Ctx, cut: Cutin, time: number, pairs: CutinPair[]): void {
+/** area: 暗がりと白い光で塗る範囲（省くと画面全体。縦長の画面では、縮めて描くので、窓の全体を渡す）。 */
+export function drawCutin(ctx: Ctx, cut: Cutin, time: number, pairs: CutinPair[], area: { x: number; y: number; w: number; h: number } = { x: 0, y: 0, w: W, h: H }): void {
   const u = time - cut.at;
   const length = cut.end - cut.at;
   if (u < 0 || u > length + CUTIN_FLASH_AFTER || pairs.length === 0) return;
@@ -48,7 +49,7 @@ export function drawCutin(ctx: Ctx, cut: Cutin, time: number, pairs: CutinPair[]
   if (u < length) {
     // 暗がり
     ctx.fillStyle = `rgba(14, 8, 20, ${0.66 * Math.min(clamp01(u / 0.12), clamp01((length - u) / 0.12 + 0.2))})`;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(area.x, area.y, area.w, area.h);
     drawBand(ctx, cut, u, open, color, cy);
 
     if (open > 0.6) {
@@ -68,7 +69,7 @@ export function drawCutin(ctx: Ctx, cut: Cutin, time: number, pairs: CutinPair[]
   const flash = u < length ? clamp01((u - (length - 0.1)) / 0.1) : 1 - clamp01((u - length) / CUTIN_FLASH_AFTER);
   if (flash > 0) {
     ctx.fillStyle = `rgba(255, 255, 250, ${0.85 * flash})`;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(area.x, area.y, area.w, area.h);
   }
   ctx.restore();
 }
@@ -154,12 +155,15 @@ function drawPair(ctx: Ctx, cut: Cutin, pair: CutinPair, u: number, length: numb
   ctx.fillRect(fx - body * 2.3, midY - body * 2.3, body * 4.6, body * 4.6);
   const local = u - CUTIN_VOICE_DELAY;
   const talk = row === 0 && cut.clip?.mouth && local >= 0 ? mouthAt(cut.clip.mouth, local) : local >= 0 && local < 1.1 ? 0.3 + 0.7 * Math.abs(Math.sin(local * 14 + row)) : 0;
-  drawActor(ctx, { ...pair.by.look, x: fx, y: feet, scale, facing: 1, mood: 'sly', wings: true, talk, shadow: false });
+  // 手をかざす: 光が飛びはじめる前に、相手のほうへ手を突き出し、変わったあとに下ろす
+  const reach = morphed ? 1 - clamp01((u - morphAt) / 0.3) : easeOut(clamp01((u - 0.3) / 0.2));
+  drawActor(ctx, { ...pair.by.look, x: fx, y: feet, scale, facing: 1, mood: 'sly', wings: true, talk, shadow: false, ...(reach > 0 ? { reach: { side: 1 as const, k: reach } } : {}) });
 
   // ずんだの光（妖精の手もとから、ねらわれた人へ）
   if (u > 0.5 && !morphed) {
-    const hx = fx + body * 0.95;
-    const hy = feet - body * 0.85;
+    // 光の出どころは、かざした手のひら
+    const hx = fx + body * (0.95 + REACH_OUT * reach);
+    const hy = feet - body * (0.8 + REACH_UP * reach);
     const tx = vx - body * 0.4;
     const ty = feet - body * 0.95;
     const grow = clamp01((u - 0.5) / 0.25);

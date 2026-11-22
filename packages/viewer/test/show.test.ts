@@ -6,8 +6,8 @@ import { buildShow, clockAt, INTRO_SECONDS, posesAt, roamClockAt, segmentAt, sho
 import type { MeetingSegment, RoamSegment } from '../src/show.ts';
 
 const map = JSON.parse(readFileSync(path.resolve(import.meta.dirname, '../../../content/maps/workshop-small.json'), 'utf8'));
-// 声と見せ場の多い、長めの試合の種（台本ボットは名前を乱数のたねに使うので、登場人物を変えたら選び直す）
-const SEEDS = [15, 37, 11, 32];
+// 公開版の登場人物（色の名前の餅）で選んだ種（声が多く、餅に変える見せ場が何度もある試合）
+const SEEDS = [13, 37, 17, 23];
 const play = (seed: number, players = 6) => runMatch({ seed, map, players, brains: [null], denyList: [] });
 
 describe('上映の時間軸', () => {
@@ -66,10 +66,11 @@ describe('上映の時間軸', () => {
         const roam = roams.find((r) => cue.at >= r.start - 1e-6 && cue.at <= r.end + 3 + 1e-6)!;
         expect(roam).toBeDefined();
         const said = showTimeOf(roam, event.t);
-        // 声は、言った時より前には出ない。待たせるのは、雑談なら試合の中の時間で2秒まで、ひとりごとなら上映の時間で3秒まで
+        // 声は、言った時より前には出ない。待たせるのは、雑談なら試合の中の時間で4秒まで（仲よしへの返事の上限。show.ts の FRIEND_WAIT_MAX。ほかの雑談は1秒）、ひとりごとなら上映の時間で3秒まで
+        // （2026-11-22、餅のすぐそばまで歩いてから知らせる決まりにして試合の中身が変わり、種21で仲よしへの返事が 2.005 秒になった。前の上限 2 は、たまたま収まっていた値）
         expect(cue.at).toBeGreaterThanOrEqual(said - 1e-6);
         if (cue.voiced) {
-          if (event.heard.length > 0) expect(roamClockAt(roam, cue.at) - event.t).toBeLessThanOrEqual(2 + 1e-6);
+          if (event.heard.length > 0) expect(roamClockAt(roam, cue.at) - event.t).toBeLessThanOrEqual(4 + 1e-6);
           else expect(cue.at - said).toBeLessThanOrEqual(3 + 1e-6);
           // 鳴っている声は、その見回りの中で鳴り終わる（集会の告知と重ならない）
           expect(cue.end).toBeLessThanOrEqual(roam.end + 1e-6);

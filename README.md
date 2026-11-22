@@ -19,15 +19,21 @@ Among Us をモチーフにして作りました（Innersloth とは関係あり
 
 | 役わり | 人数（11人の時） | 勝ち方 |
 |---|---|---|
-| 従業員 | 9人 | 仕込みをぜんぶ終える。または、妖精を全員クビにする |
+| 従業員 | 6人 | 仕込みをぜんぶ終える。または、妖精を全員クビにする |
+| 占い師（従業員の側） | 1人 | 従業員と同じ |
 | ずんだの妖精 | 2人 | 起きている人間を、妖精と同じ数まで減らす。または、かまどの焚きすぎを直させない |
+| 妖精マニア（妖精の側の人間） | 1人 | 妖精と同じ |
+| 狐（ひとりだけの側） | 1人 | 自分の仕込みを7工程終えて、試合が終わった時に起きていれば、どちらが勝っても勝ちを横取りする |
 
-妖精どうしは、互いが誰かを知っています。従業員は、誰の役わりも知りません。
-URL に `?foxes=1` を付けると、どちらにもつかない「狐」が1人入ります（試合の終わりに起きていれば、勝ちを横取りします）。
+- 妖精どうしは、互いが誰かを知っています。ほかの人は、誰の役わりも知りません。
+- **占い師**は、見回り1回につき1人、相手のそばに10秒いつづけると、妖精かどうかが自分にだけ分かります。途中で離れると、はじめからです。
+- **妖精マニア**は、誰が妖精かを知らず、妖精も妖精マニアを知りません。手をかざす力も妨害もありません。
+- **狐**には、妖精の手が効きません。でも、占われると、その場でずんだ餅になります。
+- 狐・占い師・妖精マニアは、9人以上の時に1人ずつ入ります。URL に `?foxes=0&seers=0&madmen=0` を付けると、妖精と従業員だけの試合になります。
 
 ### 見回り
 
-- 従業員は工房の持ち場をまわって、仕込み（餅つき・ずんだあんづくりなどの餅づくり、機械の修理、のれんを出すなどの開店の支度）を進めます。画面の上の帯が、工房全体の進み具合です。
+- 従業員は工房の持ち場をまわって、仕込み（餅つき・ずんだあんづくりなどの餅づくり、機械の修理、のれんを出すなどの開店の支度）を進めます。仕込みは3つずつ見えていて、1つ終えると次が出ます。持ち場は人ごとにちがいます。画面の上の帯が、工房全体の進み具合です。
 - 妖精は、すぐそばの人に手をかざして、ずんだ餅に変えます（一度変えると、しばらく次は変えられません）。
 - ずんだ餅になった人は、心だけになって、こっそり仕込みを続けます。話したり投票したりはできません。
 - 妖精は、床下の抜け道を通って、離れた部屋へすばやく移れます。
@@ -42,8 +48,9 @@ URL に `?foxes=1` を付けると、どちらにもつかない「狐」が1人
 
 ### 集会と投票
 
-- ずんだ餅を見つけた人が知らせるか、中庭の鐘が鳴らされると、全員が集まって集会が始まります。
+- ずんだ餅を見つけた人が、すぐそばまで行って知らせるか、中庭の鐘が鳴らされると、全員が集まって集会が始まります。
 - 見たこと・聞いたことを順に話し、全員で投票します（投票しない「スキップ」もできます）。いちばん票を集めた人はクビになります。ただし、2票に届かない時・いちばんが同じ票数で並んだ時・スキップの票のほうが多い時は、誰もクビになりません。
+- 誰が誰に入れたかは、開票で全員に分かります。クビになった人が妖精だったかどうかは全員に知らされ、狐なら「狐だった」と分かります。
 - それぞれが知っているのは、自分で見たこと・聞いたことだけです。
 
 ## 画面と操作
@@ -64,7 +71,9 @@ URL に `?foxes=1` を付けると、どちらにもつかない「狐」が1人
 |---|---|
 | `?seed=7` | 試合の種 |
 | `?players=8` | 人数（5〜12。既定は11） |
-| `?foxes=1` | 狐を入れる |
+| `?foxes=0` | 狐を入れない（既定は、9人以上なら1人） |
+| `?seers=0` | 占い師を入れない（既定は、9人以上なら1人） |
+| `?madmen=0` | 妖精マニアを入れない（既定は、9人以上なら1人） |
 | `?secrets=0` | 役職と内心を隠して始める |
 | `?speed=2` | 速さ |
 | `?sfx=0` | 音を出さない |
@@ -130,15 +139,21 @@ The game text is in Japanese.
 
 | Role | Count (11 players) | How to win |
 |---|---|---|
-| Worker | 9 | Finish all the prep tasks, or fire every fairy |
+| Worker | 6 | Finish all the prep tasks, or fire every fairy |
+| Seer (workers' side) | 1 | Same as the workers |
 | Zunda fairy | 2 | Bring the number of awake humans down to the number of fairies, or keep the oven from being fixed in time |
+| Fairy fan (a human on the fairies' side) | 1 | Same as the fairies |
+| Fox (a side of its own) | 1 | Finish 7 of its own task steps and still be awake when the match ends; then it steals the win from whichever side won |
 
-The fairies know each other. Workers know nobody's role.
-Add `?foxes=1` to the URL to include one "fox", who sides with neither team and steals the win if still awake when the match ends.
+- The fairies know each other. Nobody else knows anyone's role.
+- The **seer** can check one person per roaming round by staying next to them for 10 seconds; only the seer learns whether that person is a fairy. Moving away starts the count over.
+- The **fairy fan** does not know who the fairies are, and the fairies do not know the fan. The fan cannot turn people into mochi or sabotage.
+- A fairy's hand has no effect on the **fox**, but the fox turns into mochi on the spot if the seer checks it.
+- The fox, the seer and the fairy fan each join when there are 9 or more players. Add `?foxes=0&seers=0&madmen=0` to the URL for a match with only fairies and workers.
 
 ### Roaming
 
-- Workers move between stations in the workshop to do prep tasks (making mochi such as pounding rice cakes and making zunda bean paste, repairing machines, and getting the shop ready such as hanging the shop curtain). The bar at the top shows the workshop's overall progress.
+- Workers move between stations in the workshop to do prep tasks (making mochi such as pounding rice cakes and making zunda bean paste, repairing machines, and getting the shop ready such as hanging the shop curtain). Each worker sees three tasks at a time; finishing one reveals the next. Stations differ from person to person. The bar at the top shows the workshop's overall progress.
 - A fairy can hold out a hand to someone right next to it and turn them into zunda mochi (then it must wait a while before doing it again).
 - People who become mochi keep working quietly as spirits. They can no longer talk or vote.
 - Fairies can travel quickly to distant rooms through passages under the floor.
@@ -153,8 +168,9 @@ Add `?foxes=1` to the URL to include one "fox", who sides with neither team and 
 
 ### Meetings and votes
 
-- When someone reports a mochi they found, or rings the bell in the courtyard, everyone gathers for a meeting.
+- When someone walks right up to a mochi they found and reports it, or rings the bell in the courtyard, everyone gathers for a meeting.
 - Players take turns saying what they saw and heard, then everyone votes (or skips). The player with the most votes is fired, except that nobody is fired when the top count is under 2 votes, when there is a tie for the top, or when skips are at least as many as the top count.
+- Who voted for whom is shown to everyone when the votes are opened. Everyone is told whether a fired player was a fairy, and a fired fox is revealed as a fox.
 - Each player only knows what they personally saw and heard.
 
 ## Screen and controls
@@ -175,7 +191,9 @@ Add `?foxes=1` to the URL to include one "fox", who sides with neither team and 
 |---|---|
 | `?seed=7` | Match seed |
 | `?players=8` | Number of players (5–12, default 11) |
-| `?foxes=1` | Include a fox |
+| `?foxes=0` | No fox (default: 1 with 9 or more players) |
+| `?seers=0` | No seer (default: 1 with 9 or more players) |
+| `?madmen=0` | No fairy fan (default: 1 with 9 or more players) |
 | `?secrets=0` | Start with roles and thoughts hidden |
 | `?speed=2` | Playback speed |
 | `?sfx=0` | Mute sound |

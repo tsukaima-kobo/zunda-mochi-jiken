@@ -1,7 +1,7 @@
 // 真の状態。ここにある型と値は sim と server（進行役）だけが触る。
 // エージェントへ渡るのは observe.ts の buildObservation が作る観測だけ。
 
-import type { BondView, Role } from '../../protocol/src/index.ts';
+import type { BondView, CastCounts, Divined, Role } from '../../protocol/src/index.ts';
 
 export type PlayerId = string;
 
@@ -20,6 +20,10 @@ export interface PlayerTruth {
   status: PlayerStatus;
   /** 本人が見聞きしたこと。本人の観測にだけ入る。 */
   facts: string[];
+  /** 占い師だけ: これまでに占った結果（古い順）。本人の観測にだけ入る。 */
+  divined?: Divined[];
+  /** 狐だけ（横取りに仕込みの条件がある試合）: 自分の仕込みの進み。本人の観測にだけ入る。 */
+  foxWork?: { done: number; need: number };
 }
 
 export interface SpokenLine {
@@ -112,12 +116,21 @@ export function playerById(world: Pick<World, 'players'>, id: PlayerId): PlayerT
 }
 
 /** この試合の顔ぶれ（役職ごとの人数）。全員に公開する。誰がどの役職かは入らない。 */
-export function castOf(world: Pick<World, 'players'>): { total: number; nibblers: number; madmen: number; foxes: number } {
+export function castOf(world: Pick<World, 'players'> & { roam?: { foxSteps?: number; divineSeconds?: number } }): CastCounts & { foxes: number; seers: number } {
+  const foxes = world.players.filter((p) => p.role === 'fox').length;
+  // 狐の横取りの条件（自分の仕込みの工程の数）も、全員が知っている決まり（2026-11-21 から）
+  const foxSteps = foxes > 0 ? (world.roam?.foxSteps ?? 0) : 0;
+  const seers = world.players.filter((p) => p.role === 'seer').length;
+  // 占うのに相手のそばにいる秒数も、全員が知っている決まり（2026-11-21 夜から）
+  const divineSeconds = seers > 0 ? (world.roam?.divineSeconds ?? 0) : 0;
   return {
     total: world.players.length,
     nibblers: world.players.filter((p) => p.role === 'nibbler').length,
     madmen: world.players.filter((p) => p.role === 'madman').length,
-    foxes: world.players.filter((p) => p.role === 'fox').length,
+    foxes,
+    seers,
+    ...(foxSteps > 0 ? { foxSteps } : {}),
+    ...(divineSeconds > 0 ? { divineSeconds } : {}),
   };
 }
 
@@ -133,4 +146,10 @@ export function charCount(text: string): number {
 /** 秒数を 分:秒 の形にする。 */
 export function clockText(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+}
+
+/** クビになって「狐だった」と全員に知らされた狐の人数（1人以上の時だけ入れる。観測の foxesOut）。 */
+export function foxesOutOf(world: { players: readonly PlayerTruth[] }): { foxesOut?: number } {
+  const n = world.players.filter((p) => p.role === 'fox' && p.status === 'sent_home').length;
+  return n > 0 ? { foxesOut: n } : {};
 }

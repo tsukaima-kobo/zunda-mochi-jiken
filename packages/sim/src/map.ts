@@ -39,7 +39,12 @@ export interface DutyDefinition {
   kind: 'common' | 'long' | 'short';
   /** 仕込みの種類（dutyGroups の id）。無いマップでは、long と short の数で配る。 */
   group?: string;
-  steps: { station: string; seconds: number }[];
+  /**
+   * 工程。station が配列なら、人ごとに、その中の1か所をばらばらに選ぶ（同じ仕込みでも、人によって場所がちがう）。
+   */
+  steps: { station: string | string[]; seconds: number }[];
+  /** 人ごとに、steps の中から pick か所をばらばらに選ぶ（並びは steps のまま。配線の修理は、6か所のうち3か所）。無ければ全部。 */
+  pick?: number;
 }
 
 /** 仕込みの種類と、1人に配る工程のうち、その種類が占める割合。 */

@@ -196,7 +196,9 @@ const ENDING_SECONDS = 12;
 const SPEAK_PAD = 0.2;
 const GAP = 0.2;
 /** 見回りの中の出来事を、画面でどのくらいの間あつかうか（秒）。 */
-const ROAM_CUE_SECONDS: Partial<Record<MatchEvent['type'], number>> = { decide: 3.2, nap: 2.4, task: 1.8, sabotage: 4.5, fixed: 3.2, door_open: 1.2, sneak: 1.3, bell: 1, look: 2 };
+/** 占いの瞬間の絵（光・輪・結果の札）の、もとの長さ。案内役が結果を言い終わるのが遅い時は、札だけ長く出す（cue.end を延ばす）。 */
+export const DIVINE_CUE_SECONDS = 2.6;
+const ROAM_CUE_SECONDS: Partial<Record<MatchEvent['type'], number>> = { decide: 3.2, nap: 2.4, nap_failed: 3, task: 1.8, sabotage: 4.5, fixed: 3.2, door_open: 1.2, sneak: 1.3, bell: 1, look: 2, divine: DIVINE_CUE_SECONDS };
 
 /**
  * 見回りの間の声は、前の声と重ならないよう、終わるのを待ってから流す。待ちがこの秒数を超える声は、ふきだしだけにする。
@@ -214,6 +216,8 @@ export const SLOW_SPEED = 0.7;
 const CHAT_WAIT_MAX = 1;
 /** 仲よし（親密度4以上）どうしのやりとりの返事は、もう少し待ってでも鳴らす（2026-11-19、同じ瞬間に話し合った仲よしの返事が、ふきだしだけになっていた）。 */
 const FRIEND_WAIT_MAX = 4;
+/** 返事の始まりの言葉（返している相手の声が鳴っていない時は、その返事を鳴らさない）。 */
+const REPLY_OPENER = /^(うん|ええ|はい|そうそう|そうだね|そうですね|そうですわね|そっか|なるほど|ありがと|了解|わかった|分かった|たしかに|確かに|いいよ|だよね|でしょ|ほんとそれ)/;
 
 /** 見回りの始まりからの試合の中の秒 → 上映の秒。warp が無ければ、そのまま。 */
 function warpForward(warp: readonly number[] | undefined, local: number): number {
@@ -296,7 +300,14 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
     return callout ? callout.delay + voiceOf(callout).length + 0.05 : 0;
   };
   /** 見回りの中の声（登場人物の声と、案内役の一言）。見回りが終わる時に、まとめて並べる。talk: 聞いている人がいる声（ひとりごとでない）。 */
-  let pending: { chat: Cue | null; callout: ShowCallout | null; said: number; length: number; talk: boolean }[] = [];
+  // needs: この声が鳴った時だけ言う一言（その声への案内役のツッコミ・補足）。once: 同じ印の一言は、試合で最初に鳴った1つだけ。
+  // follow: この声のあとに言いたい一言の印（まだ使っていなければ、この声を先に鳴らす）
+  // spot: 占いの瞬間（その結果を言う案内役の一言に付ける）。占いがもう起きたのに、まだ言い始めていない雑談は、ふきだしだけにして、この一言を先に流す
+  let pending: { chat: Cue | null; callout: ShowCallout | null; said: number; length: number; talk: boolean; needs?: Cue; once?: string; follow?: string[]; spot?: number }[] = [];
+  /** 占いの瞬間と、その結果を言う案内役の一言（見回りが終わる時に、札を出しておく長さを合わせる）。 */
+  let divineTold: { cue: Cue; callout: ShowCallout }[] = [];
+  /** もう鳴らした一言の印（試合を通して）。 */
+  const usedOnce = new Set<string>();
   /** 見回りが始まった時の、各一覧の長さ（この見回りの中で足したものを、あとで時刻を引きのばすため）。 */
   let mark = { cues: 0, callouts: 0, progress: 0, troubles: 0, shuts: 0, sneaks: 0, looks: 0 };
   /**
@@ -331,10 +342,13 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       if (item.callout) return 50;
       const event = (item.chat as Cue).event as EventOf<'chat'>;
       // 仲よし（親密度4以上）に聞こえるように呼びかけている声を、同じ瞬間の声の中で先に流す
-      // （言わせるのではなく、言った声を拾う）
       const friend = Math.max(0, ...called(event.say, event.speaker).filter((name) => event.heard.includes(name)).map((name) => closeness(event.speaker, name)));
+      // 案内役がツッコミ・補足を入れたい声は、先に鳴らす（まだその一言を使っていなければ）
+      const wanted = (item as Voice).follow?.some((key) => !usedOnce.has(key)) ? 6 : 0;
+      // 上映の編集で、同じ瞬間の声の中の順番を決めた声（edits.json の keep の lead）
+      if (event.keep) return 1000 + event.keep;
       // 仲よしの呼びかけへの返事は、ほかの呼びかけより先に（やりとりが途中で切れないように）
-      return baseScore(item) + (friend >= 4 ? friend - 2 : 0) + (answersFriend(item) ? 3 : 0);
+      return baseScore(item) + (friend >= 4 ? friend - 2 : 0) + (answersFriend(item) ? 3 : 0) + wanted;
     };
     /** いま鳴った仲よしの声への返事か（仲よしに呼ばれた / 仲よしの名前を呼んで答えている）。 */
     const answersFriend = (item: Voice): boolean => {
@@ -364,7 +378,23 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       if (recent.some((h) => h.heard.includes(event.speaker) && event.heard.includes(h.speaker))) points += 3;
       return points;
     };
-    const voice = (item: Voice, nextNap: Item | undefined): boolean => {
+    // 上映の編集で残すと決めた声（keep）が言い終わる時刻。次の見せ場（餅に変わる瞬間）を、ここまで待たせる
+    let holdNap = -Infinity;
+    const voice = (item: Voice, nextNap: Item | undefined, spots: readonly number[] = []): boolean => {
+      // 一言: 付いている声が鳴らなかった時と、同じ印をもう使った時は言わない
+      if (item.callout && item.needs && !item.needs.voiced) return false;
+      if (item.callout && item.once && usedOnce.has(item.once)) return false;
+      // 「うん、」「ありがと」などで始まる返事は、返している相手の声が鳴っていなければ鳴らさない（前が分からない返事だけが聞こえるのを避ける。
+      // 上映の編集で残すと決めた声（edits.json の keep）と、その声へのツッコミは、待たせてでも鳴らす。mute の声は鳴らさない
+      if (item.chat && (item.chat.event as EventOf<'chat'>).mute) return false;
+      // 妨害の知らせ（誰があかりを消したか・かまどを焚きすぎにしたか）も、観戦する人が見逃せないので、待たせてでも鳴らす
+      const kept = ((item.chat ?? item.needs)?.event.type === 'chat' && ((item.chat ?? item.needs)?.event as EventOf<'chat'>).keep !== undefined) || (item.callout?.key.startsWith('sab:') ?? false);
+      const keptChat = kept && Boolean(item.chat);
+      if (item.chat && !kept) {
+        const event = item.chat.event as EventOf<'chat'>;
+        const answered = heardNow.some((h) => item.lin - h.lin <= 10 && h.speaker !== event.speaker && h.heard.includes(event.speaker) && event.heard.includes(h.speaker));
+        if (REPLY_OPENER.test(event.say.replace(/^[…・.。、！!？?\s]+/, '')) && !answered) return false;
+      }
       const at = Math.max(item.lin, lin0);
       const natural = show0 + (at - lin0);
       const stretch = item.callout !== null || item.talk;
@@ -376,18 +406,24 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
           // いちばん遅く流しても、前の声が終わった時に、世界はここまで進んでいる
           const linFree = lin0 + (free - show0) * SLOW_SPEED;
           knotLin = Math.max(at, linFree);
+          // 残すと決めた声は、次の見せ場より前に言い始める（世界を、いつもの「ゆっくり」より遅くして待たせる）
+          if (keptChat && nextNap && nextNap.lin >= at) knotLin = Math.min(knotLin, Math.max(at, nextNap.lin - 0.05));
           knotShow = free;
           start = free;
         } else {
           start = free;
-          if (free - natural > CHAT_DELAY_MAX) return false;
+          if (free - natural > CHAT_DELAY_MAX && !kept) return false;
         }
       }
       // 言ってから声になるまでに、世界が進んでしまう秒数
       const late = knotLin + (start - knotShow) - item.lin;
-      if (late > (item.callout ? CALLOUT_DELAY_MAX : stretch ? (friendReply(item) ? FRIEND_WAIT_MAX : CHAT_WAIT_MAX) : CHAT_DELAY_MAX) + 1e-9) return false;
-      // 次の見せ場が始まるまでに言い終われない声は出さない（見せ場の決めぜりふと重ねない）
-      if (nextNap && (nextNap.lin < knotLin || start + item.length + CUTIN_SECONDS + 0.05 > knotShow + (nextNap.lin - knotLin) / SLOW_SPEED)) return false;
+      // 占いの結果を言う一言が待っているのに、占いのあとで言い始めることになる雑談は、ふきだしだけにする
+      if (item.chat && !kept && spots.some((spot) => spot <= knotLin + (start - knotShow) + 1e-6)) return false;
+      if (!kept && late > (item.callout ? CALLOUT_DELAY_MAX : stretch ? (friendReply(item) ? FRIEND_WAIT_MAX : CHAT_WAIT_MAX) : CHAT_DELAY_MAX) + 1e-9) return false;
+      // 次の見せ場が始まるまでに言い終われない声は出さない（見せ場の決めぜりふと重ねない）。
+      // 残すと決めた声（妖精が、ねらった相手に声をかける所など）は、見せ場のほうを待たせる。見せ場のあとになってしまう時だけ出さない
+      if (keptChat && nextNap && nextNap.lin < knotLin) return false;
+      if (!keptChat && nextNap && (nextNap.lin < knotLin || start + item.length + CUTIN_SECONDS + 0.05 > knotShow + (nextNap.lin - knotLin) / SLOW_SPEED)) return false;
       knot(knotLin, knotShow);
       const placed = item.chat ?? item.callout;
       if (placed) {
@@ -395,6 +431,8 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
         placed.end = start + item.length;
       }
       free = start + item.length + CHAT_GAP;
+      if (keptChat && nextNap) holdNap = free;
+      if (item.callout && item.once) usedOnce.add(item.once);
       if (item.chat) {
         const event = item.chat.event as EventOf<'chat'>;
         heardNow.push({ lin: item.lin, speaker: event.speaker, called: called(event.say, event.speaker), heard: event.heard });
@@ -414,13 +452,16 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
         if (item.nap) {
           const at = Math.max(item.lin, lin0);
           // 見せ場が始まる前に、鳴っている声が言い終わるようにする
-          const show = Math.min(Math.max(show0 + (at - lin0), free + CUTIN_SECONDS + 0.1), show0 + (at - lin0) / SLOW_SPEED);
+          // 残すと決めた声が鳴っている間は、「ゆっくり」の限りを超えてでも、言い終わるまで待つ
+          const show = Math.min(Math.max(show0 + (at - lin0), free + CUTIN_SECONDS + 0.1), Math.max(show0 + (at - lin0) / SLOW_SPEED, holdNap + CUTIN_SECONDS + 0.1));
+          holdNap = -Infinity;
           knot(at, show);
           free = Math.max(free, show + 0.3);
           continue;
         }
         const later = group.find((other) => other.nap) ?? nextNap;
-        if (voice(item, later)) continue;
+        const spots = [...group, ...items.slice(j)].flatMap((other) => (!other.nap && other.callout?.voiced && other.spot !== undefined ? [other.spot] : []));
+        if (voice(item, later, spots)) continue;
         if (item.chat) {
           item.chat.voiced = false;
           delete item.chat.clip;
@@ -522,6 +563,9 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       cue.voiced = false;
       delete cue.clip;
     }
+    // 占いの結果の札は、案内役が結果を言い終わるまで出しておく
+    for (const { cue, callout } of divineTold) if (callout.voiced) cue.end = Math.max(cue.end, callout.end - 0.5);
+    divineTold = [];
     const held = Math.max(round.end, ...open.filter((cue) => cue.voiced).map((cue) => cue.end), ...told.filter((c) => c.voiced).map((c) => c.end)) - round.end;
     if (held > 0) {
       round.end += held;
@@ -541,7 +585,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       mark = { cues: cues.length, callouts: callouts.length, progress: progress.length, troubles: troubles.length, shuts: shuts.length, sneaks: sneaks.length, looks: looks.length };
       cues.push({ at: cursor, end: cursor, event });
       if (event.tasks && event.tasks.total > 0) progress.push({ at: cursor, done: event.tasks.done, total: event.tasks.total, bump: false });
-    } else if (event.type === 'decide' || event.type === 'nap' || event.type === 'task' || event.type === 'sabotage' || event.type === 'fixed' || event.type === 'door_open' || event.type === 'sneak' || event.type === 'bell') {
+    } else if (event.type === 'decide' || event.type === 'nap' || event.type === 'nap_failed' || event.type === 'divine' || event.type === 'task' || event.type === 'sabotage' || event.type === 'fixed' || event.type === 'door_open' || event.type === 'sneak' || event.type === 'bell') {
       const at = roam ? roam.start + (event.t - roam.clock0) : cursor;
       cues.push({ at, end: at + (ROAM_CUE_SECONDS[event.type] ?? 2), event });
       // 案内役の一言（見回りの間の声と同じ列に並べ、重ねない）
@@ -550,7 +594,8 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
         const said = at + callout.delay;
         const placed: ShowCallout = { at: said, end: said + length, key: callout.key, text: callout.text, secret: callout.secret, voiced: true, ...(clip ? { clip } : {}) };
         callouts.push(placed);
-        pending.push({ chat: null, callout: placed, said, length, talk: true });
+        pending.push({ chat: null, callout: placed, said, length, talk: true, ...(event.type === 'divine' ? { spot: at } : {}) });
+        if (event.type === 'divine') divineTold.push({ cue: cues.at(-1) as Cue, callout: placed });
       }
       if (event.type === 'task') {
         if (!event.pretend && event.total > 0) progress.push({ at, done: event.done, total: event.total, bump: true });
@@ -623,8 +668,18 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       const length = clip ? clip.seconds + 0.3 : readingSeconds(event.say);
       const cue: Cue = { at, end: at + length, event, ...(clip ? { clip } : {}), voiced: true };
       cues.push(cue);
-      if (roam) pending.push({ chat: cue, callout: null, said: at, length, talk: event.heard.length > 0 });
-      else cue.voiced = false;
+      if (roam) {
+        // この声への案内役の一言（ツッコミ・補足）。声が鳴った時だけ、そのすぐあとに言う
+        const follow = (calloutsAt.get(index) ?? []).filter((c) => c.onChat);
+        pending.push({ chat: cue, callout: null, said: at, length, talk: event.heard.length > 0, follow: follow.filter((c) => c.lift).map((c) => c.once ?? c.key) });
+        for (const callout of follow) {
+          const voiced = voiceOf(callout);
+          const said = at + callout.delay;
+          const placed: ShowCallout = { at: said, end: said + voiced.length, key: callout.key, text: callout.text, secret: callout.secret, voiced: true, ...(voiced.clip ? { clip: voiced.clip } : {}) };
+          callouts.push(placed);
+          pending.push({ chat: null, callout: placed, said, length: voiced.length, talk: true, needs: cue, ...(callout.once ? { once: callout.once } : {}) });
+        }
+      } else cue.voiced = false;
       chatIndex += 1;
     } else if (event.type === 'meeting_start') {
       closeRoam(event.t);

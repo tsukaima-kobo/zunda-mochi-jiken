@@ -6,25 +6,51 @@ import { z } from 'zod';
 import type { BondView } from './cast.ts';
 
 /**
- * 従業員 / ずんだの妖精 / 妖精びいき / 狐。
+ * 従業員 / ずんだの妖精 / 妖精マニア / 狐 / 占い師。
  * 内部の名前 nibbler は、前の題材（つまみ食い犯）のなごり。記録の互換のために残している。
- * 妖精びいき（madman）は、人狼の狂人にあたる人間。妖精の味方だが、誰が妖精かは知らない（2026-11-18 から既定では入れない）。
- * 狐（fox）は、人狼の妖狐にあたる、ひとりだけの陣営。試合が終わった時に起きていれば、どちらが勝っても勝ちを横取りする。
- * この作品には占い師がいないので、狐も妖精に餅にされる（本家の妖狐のように噛まれない、ということはない）。
+ * 妖精マニア（madman）は、人狼の狂人にあたる人間。妖精の味方だが、誰が妖精かは知らない（2026-11-18 から既定では入れない）。
+ * 狐（fox）は、人狼の妖狐にあたる、ひとりだけの陣営。試合が終わった時に起きていて、自分の仕込みを決まった数（foxSteps）だけ終えていれば、どちらが勝っても勝ちを横取りする
+ * （2026-11-21 に、仕込みの条件を足した。狐の仕込みは、従業員の進み具合には入らない）。
+ * 狐も妖精に餅にされる（本家の妖狐のように噛まれない、ということはない）。占い師に占われると、その場でずんだ餅になる。
+ * 占い師（seer）は、従業員の側の人間。自分の仕込みをしながら、見回り1回につき1人、そばにいる相手を占える（2026-11-21 昼に1試合に1回へ変え、同じ日の夕方に見回りごとへ戻した）。
+ * 分かるのは、その相手が妖精かどうかだけ（狐も妖精マニアも「妖精ではない」と出る）。占ったことは、周りからは分からない。
  */
-export type Role = 'artisan' | 'nibbler' | 'madman' | 'fox';
+export type Role = 'artisan' | 'nibbler' | 'madman' | 'fox' | 'seer';
 
 export const ROLE_LABEL: Record<Role, string> = {
   artisan: '従業員',
   nibbler: 'ずんだの妖精',
-  madman: '妖精びいき',
+  madman: '妖精マニア',
   fox: '狐',
+  seer: '占い師',
 };
 
-/** 勝ち負けの側。妖精びいきは妖精の側（妖精が勝てば勝ち）。狐はひとりだけの側。 */
+/** 勝ち負けの側。妖精マニアは妖精の側（妖精が勝てば勝ち）。狐はひとりだけの側。占い師は従業員の側。 */
 export type Side = 'artisan' | 'nibbler' | 'fox';
-export const SIDE_OF: Record<Role, Side> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox' };
+export const SIDE_OF: Record<Role, Side> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' };
 export const SIDE_LABEL: Record<Side, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', fox: '狐' };
+
+/** この試合の顔ぶれ（役職ごとの人数。誰がどれかは入らない）。全員が知っている。古い記録には foxes・seers が無い。 */
+export interface CastCounts {
+  total: number;
+  nibblers: number;
+  madmen: number;
+  foxes?: number;
+  seers?: number;
+  /** 狐が横取りするために終えておく、自分の仕込みの工程の数（全員が知っている決まり）。条件の無い試合と古い記録には無い。 */
+  foxSteps?: number;
+  /** 占い師が占うのに、相手のそばにいつづける秒数（全員が知っている決まり。2026-11-21 夜から）。占い師のいない試合と古い記録には無い。 */
+  divineSeconds?: number;
+}
+
+/** 占い師が占った結果（本人にだけ渡す）。fairy: 妖精だった。cursed: 占った相手が、その場でずんだ餅に変わった（狐だった）。 */
+export interface Divined {
+  name: string;
+  /** 何回目の見回りで占ったか。 */
+  round: number;
+  fairy: boolean;
+  cursed?: boolean;
+}
 
 /** 会議で全員に聞こえた発言。話者は表示名で表す（内部の通し番号は観測に出さない）。 */
 export interface Utterance {
@@ -57,13 +83,19 @@ export interface MeetingObservation {
     persona: string;
     /** 遊び方の癖（本人の分だけ）。 */
     style: string;
-    /** 同じ陣営だと本人が知っている相手（妖精どうしだけ。妖精びいきは誰も知らない）。 */
+    /** 同じ陣営だと本人が知っている相手（妖精どうしだけ。妖精マニアは誰も知らない）。 */
     allies: string[];
     /** 本人から見た、ほかの人との間柄（親密度）。この試合に出ている人の分だけ。 */
     bonds?: BondView[];
+    /** 占い師だけ: これまでに占った結果（古い順）。ほかの人には無い。 */
+    divined?: Divined[];
+    /** 狐だけ（横取りに仕込みの条件がある試合）: 自分の仕込みの進み（done 工程 / 要るのは need 工程）。ほかの人には無い。 */
+    foxWork?: { done: number; need: number };
   };
   /** 本人がこの回に見聞きしたこと（時刻つきの短文）。 */
   facts: string[];
+  /** クビになって「狐だった」と全員に知らされた狐の人数（狐のいる試合で、1人以上の時だけ。2026-11-21 から）。 */
+  foxesOut?: number;
   /** これまでの集会の経過（全員に公開された内容だけ）。古い順。 */
   history: string[];
   meeting: {
@@ -78,7 +110,7 @@ export interface MeetingObservation {
     transcript: Utterance[];
   };
   /** この試合の顔ぶれ（役職ごとの人数。誰がどれかは入らない）。全員が知っている。 */
-  cast?: { total: number; nibblers: number; madmen: number; foxes?: number } | null;
+  cast?: CastCounts | null;
   /**
    * いまの局面（全員に公開された情報だけで分かること）。awake は出席者の数、fairiesLeft は顔ぶれの妖精の数から
    * 「妖精だった」と公表された人を引いた数。lastChance は、ここで誰もクビにならないと、次に1人が餅になった時点で妖精の勝ちになる局面。
@@ -208,7 +240,8 @@ export const NO_TARGET = 'なし';
  */
 export interface RoamObservation {
   kind: 'roam';
-  self: { name: string; role: Role; persona: string; style: string; allies: string[]; bonds?: BondView[] };
+  /** foxWork: 狐だけ。横取りの条件の、自分の仕込みの進み（done 工程 / 要るのは need 工程）。条件の無い試合には無い。 */
+  self: { name: string; role: Role; persona: string; style: string; allies: string[]; bonds?: BondView[]; divined?: Divined[]; foxWork?: { done: number; need: number } };
   /** 何回目の見回りか（集会のたびに1つ進む）。 */
   round: number;
   /** 開始からの秒数（集会の間は止まる）。全員が同じ時計を見ている。 */
@@ -224,6 +257,8 @@ export interface RoamObservation {
   visible: { name: string; where: string; asleep: boolean; working?: boolean; checking?: string }[];
   /** 自分の仕込み（本人だけが知っている）。steps は回る順。 */
   duties?: RoamDuty[];
+  /** まだ出ていない自分の仕込みの数（仕込みを少しずつ出す試合だけ。1つ終えるたびに1つ出る。2026-11-21 夜から）。 */
+  dutiesWaiting?: number;
   /** 工房全体の仕込みの進み具合（全員に見えている）。仕込みの無いマップでは null。 */
   taskBar?: { done: number; total: number } | null;
   /** いま起きている困りごと（全員が気づく）。無ければ null。 */
@@ -259,6 +294,8 @@ export interface RoamObservation {
   lastResult: string | null;
   /** 妖精だけ: 次に人をずんだ餅に変えられるまでの秒数（0 なら変えられる）。ほかの人は null。 */
   napCooldown: number | null;
+  /** 占い師だけ: 占い。usesLeft は、この見回りであと何回占えるか（見回り1回につき1人）。ほかの人は null か無い。 */
+  divine?: { usesLeft: number } | null;
   /** 行き先にできる場所（部屋と廊下。全員が知っている）。 */
   rooms: string[];
   /** 工房の間取り（全員が知っている）。「場所: 隣り合っていて歩いて移れる場所」の行。 */
@@ -268,16 +305,21 @@ export interface RoamObservation {
   /** 全員の名前（名簿順）。 */
   roster: string[];
   /** この試合の顔ぶれ（役職ごとの人数。誰がどれかは入らない）。全員が知っている。 */
-  cast?: { total: number; nibblers: number; madmen: number; foxes?: number } | null;
+  cast?: CastCounts | null;
   /** もう工房にいないと全員が知っている人（集会で分かったこと）。 */
   away: Absence[];
+  /** クビになって「狐だった」と全員に知らされた狐の人数（狐のいる試合で、1人以上の時だけ。2026-11-21 から）。 */
+  foxesOut?: number;
   /** これまでの集会の経過（全員に公開された内容だけ）。古い順。 */
   history: string[];
 }
 
 export interface RoamDuty {
   name: string;
+  /** 終えた工程と、いまの工程（次の工程の場所は、いまの工程を終えるまで分からない。2026-11-21 から）。 */
   steps: { what: string; room: string; done: boolean }[];
+  /** この仕込みの工程の数（steps に無い先の工程も数える）。古い記録には無い。 */
+  total?: number;
 }
 
 export type DeviceKind = 'admin' | 'vitals' | 'cameras';
@@ -310,7 +352,9 @@ export const SABOTAGE_CRISIS = 'かまど';
 export const ROAM_ACTIONS = ['move_to', 'follow', 'wait', 'report', 'do_task', 'fix', 'call_meeting', 'check'] as const;
 /** 妖精だけができる行動。transform は人をずんだ餅に変える。transform_if_unseen は、ほかの誰にも見られていない時だけ変える。 */
 export const NIBBLER_ACTIONS = ['transform', 'transform_if_unseen', 'sneak', 'sabotage'] as const;
-export const ALL_ROAM_ACTIONS = [...ROAM_ACTIONS, ...NIBBLER_ACTIONS] as const;
+/** 占い師だけができる行動。divine は、見えている相手に近づいて占う（妖精かどうかが、本人にだけ分かる）。 */
+export const SEER_ACTIONS = ['divine'] as const;
+export const ALL_ROAM_ACTIONS = [...ROAM_ACTIONS, ...NIBBLER_ACTIONS, ...SEER_ACTIONS] as const;
 export type RoamAction = (typeof ALL_ROAM_ACTIONS)[number];
 
 export const RoamIntent = z.object({
@@ -319,7 +363,7 @@ export const RoamIntent = z.object({
   /** 声に出して言うこと（近くの人にだけ聞こえる）。言わない時は空。 */
   say: z.string().default(''),
   action: z.enum(ALL_ROAM_ACTIONS),
-  /** move_to: 部屋の名前 / follow・report・transform: いま見えている相手の名前 / do_task: 仕込みの名前か「なし」 / fix: 直す場所の名前か「なし」 / check: 道具の名前 / wait・call_meeting: 「なし」 */
+  /** move_to: 部屋の名前 / follow・report・transform・divine: いま見えている相手の名前 / do_task: 仕込みの名前か「なし」 / fix: 直す場所の名前か「なし」 / check: 道具の名前 / wait・call_meeting: 「なし」 */
   target: z.string(),
 });
 export type RoamIntent = z.infer<typeof RoamIntent>;
@@ -328,7 +372,9 @@ export type RoamIntent = z.infer<typeof RoamIntent>;
 export function roamActions(obs: RoamObservation): RoamAction[] {
   // 道具の無い工房では、check は出さない
   const common = (obs.devices ?? []).length > 0 ? [...ROAM_ACTIONS] : ROAM_ACTIONS.filter((a) => a !== 'check');
-  return obs.self.role === 'nibbler' ? [...common, ...NIBBLER_ACTIONS] : common;
+  if (obs.self.role === 'nibbler') return [...common, ...NIBBLER_ACTIONS];
+  // 占い師は、占える時だけ（この試合でもう占ったあとは、選べる行動に出さない）
+  return obs.self.role === 'seer' && (obs.divine?.usesLeft ?? 0) > 0 ? [...common, ...SEER_ACTIONS] : common;
 }
 
 /** まだ終わっていない自分の仕込みの名前。 */

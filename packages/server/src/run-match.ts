@@ -54,6 +54,8 @@ type Settled = { ok: true; result: RoamResult } | { ok: false; error: unknown };
 interface Pending {
   dueTick: number;
   answer: Promise<Settled>;
+  /** 判断を求めた時に、本人に見えていた、ずんだ餅になった人の名前（考えている間に通りすぎても知らせられるように）。 */
+  sawAsleep: string[];
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -64,6 +66,7 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
   const truth: Record<string, string> = { nibbler: world.truth.nibblerIds.map((id) => nameOf(world, id)).join('、') };
   if (world.truth.madmanIds.length > 0) truth.madman = world.truth.madmanIds.map((id) => nameOf(world, id)).join('、');
   if (world.truth.foxIds.length > 0) truth.fox = world.truth.foxIds.map((id) => nameOf(world, id)).join('、');
+  if (world.truth.seerIds.length > 0) truth.seer = world.truth.seerIds.map((id) => nameOf(world, id)).join('、');
   const match = new Match(world, 'match', truth, options);
   const frames: NonNullable<MatchLog['roam']>['frames'] = [];
   const steps = world.roster.map((id) => actorById(world, id).duties.reduce((n, duty) => n + duty.steps.length, 0));
@@ -94,12 +97,16 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
   const recordIncidents = () => {
     // 1刻みの中では、仕込み・抜け道・直す作業が先で、餅に変えるのはそのあと。記録もその順にする
     for (const h of world.happenings.slice(happeningsRecorded)) {
-      if (h.type === 'task') match.record({ type: 'task', t: h.t, agent: name(h.id), duty: h.duty, what: h.what, station: h.station, pretend: h.pretend, spirit: h.spirit, done: h.done, total: h.total });
+      if (h.type === 'task') match.record({ type: 'task', t: h.t, agent: name(h.id), duty: h.duty, what: h.what, station: h.station, pretend: h.pretend, spirit: h.spirit, done: h.done, total: h.total, ...(h.fox ? { fox: h.fox } : {}) });
       else if (h.type === 'sabotage') match.record({ type: 'sabotage', t: h.t, by: name(h.id), what: h.what, room: h.room, seconds: h.seconds });
       else if (h.type === 'fixed') match.record({ type: 'fixed', t: h.t, what: h.what, by: h.ids.map(name) });
       else if (h.type === 'door_open') match.record({ type: 'door_open', t: h.t, room: h.room });
       else if (h.type === 'sneak') match.record({ type: 'sneak', t: h.t, by: name(h.id), phase: h.phase, room: h.room, hatch: h.hatch, witnesses: h.witnesses.map(name) });
       else if (h.type === 'chat') match.record({ type: 'chat', t: h.t, speaker: name(h.id), say: h.text, heard: h.heard.map(name) });
+      else if (h.type === 'nap_failed') match.record({ type: 'nap_failed', t: h.t, by: name(h.id), target: name(h.targetId), room: h.room, witnesses: h.witnesses.map((w) => ({ name: name(w.id), ...(w.camera ? { camera: w.camera } : {}) })) });
+      else if (h.type === 'divine') {
+        match.record({ type: 'divine', t: h.t, by: name(h.id), target: name(h.targetId), room: h.room, fairy: h.fairy, cursed: h.cursed, witnesses: h.witnesses.map((w) => ({ name: name(w.id), ...(w.camera ? { camera: w.camera } : {}) })) });
+      }
       else if (h.type === 'look') {
         match.record({
           type: 'look',
@@ -156,7 +163,7 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
         // 声は行動より先に出す（行動が断られても、言ったことは聞こえている）
         const spoke = intent.say.trim().length > 0 && speakAloud(world, id, intent.say);
         try {
-          applyRoamIntent(world, id, intent);
+          applyRoamIntent(world, id, intent, { sawAsleep: waiting.sawAsleep });
         } catch (error) {
           if (!(error instanceof RuleViolation)) throw error;
           // 決めた時から状況が変わっていた。理由は本人にだけ返す
@@ -180,7 +187,7 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
             (result): Settled => ({ ok: true, result }),
             (error: unknown): Settled => ({ ok: false, error }),
           );
-          pending.set(id, { dueTick: world.tick + delayTicks, answer });
+          pending.set(id, { dueTick: world.tick + delayTicks, answer, sawAsleep: obs.visible.filter((v) => v.asleep).map((v) => v.name) });
         }
 
         // 3) 時間を1刻み進める。餅になった人が出していた意図は使わない
@@ -221,7 +228,7 @@ export async function runMatch(options: MatchRunOptions): Promise<MatchLog> {
     await discard([...pending.keys()]);
     const result = world.result;
     if (!result) throw new Error('勝敗が決まらないまま試合が終わりました');
-    match.record({ type: 'game_over', t: world.clock, winner: result.winner, why: result.why, ...(result.stolenFrom ? { stolenFrom: result.stolenFrom } : {}), ...tasks() });
+    match.record({ type: 'game_over', t: world.clock, winner: result.winner, why: result.why, ...(result.stolenFrom ? { stolenFrom: result.stolenFrom } : {}), ...(result.foxMissed ? { foxMissed: result.foxMissed } : {}), ...tasks() });
     match.log.result = { ...result, clock: world.clock, rounds: world.round, meetings: world.meeting.index };
     if (options.ceremonies && options.afterTalk) {
       // ここからは試合のあと。結果と全員の役職を明かしてから、日記を書き、感想会で話す

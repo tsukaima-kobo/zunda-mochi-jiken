@@ -387,6 +387,76 @@
       "room": "座敷",
       "x": 65,
       "y": 41
+    },
+    {
+      "id": "wire4",
+      "name": "配線を直す",
+      "room": "休憩室",
+      "x": 70,
+      "y": 21
+    },
+    {
+      "id": "wire5",
+      "name": "配線を直す",
+      "room": "氷室",
+      "x": 2,
+      "y": 32
+    },
+    {
+      "id": "wire6",
+      "name": "配線を直す",
+      "room": "道具部屋",
+      "x": 64,
+      "y": 32
+    },
+    {
+      "id": "feed2",
+      "name": "かまどに薪をくべる",
+      "room": "あんこ場",
+      "x": 23,
+      "y": 25
+    },
+    {
+      "id": "cloth2",
+      "name": "ふきんをたたむ",
+      "room": "洗い場",
+      "x": 24,
+      "y": 7
+    },
+    {
+      "id": "fuse2",
+      "name": "ヒューズを替える",
+      "room": "道具部屋",
+      "x": 70,
+      "y": 23
+    },
+    {
+      "id": "sweep2",
+      "name": "床を掃く",
+      "room": "倉庫",
+      "x": 5,
+      "y": 23
+    },
+    {
+      "id": "sweep3",
+      "name": "床を掃く",
+      "room": "座敷",
+      "x": 60,
+      "y": 44
+    },
+    {
+      "id": "window2",
+      "name": "窓をふく",
+      "room": "休憩室",
+      "x": 70,
+      "y": 13
+    },
+    {
+      "id": "window3",
+      "name": "窓をふく",
+      "room": "帳場",
+      "x": 1,
+      "y": 43
     }
   ],
   "dutyGroups": [
@@ -537,7 +607,10 @@
       "group": "mochi",
       "steps": [
         {
-          "station": "cloth",
+          "station": [
+            "cloth",
+            "cloth2"
+          ],
           "seconds": 3
         }
       ]
@@ -559,7 +632,10 @@
       "group": "mochi",
       "steps": [
         {
-          "station": "feed",
+          "station": [
+            "feed",
+            "feed2"
+          ],
           "seconds": 4
         }
       ]
@@ -595,8 +671,21 @@
         {
           "station": "wire3",
           "seconds": 4
+        },
+        {
+          "station": "wire4",
+          "seconds": 4
+        },
+        {
+          "station": "wire5",
+          "seconds": 4
+        },
+        {
+          "station": "wire6",
+          "seconds": 4
         }
-      ]
+      ],
+      "pick": 3
     },
     {
       "name": "発電機に油をさす",
@@ -615,7 +704,10 @@
       "group": "machine",
       "steps": [
         {
-          "station": "fuse",
+          "station": [
+            "fuse",
+            "fuse2"
+          ],
           "seconds": 3
         }
       ]
@@ -637,7 +729,11 @@
       "group": "shop",
       "steps": [
         {
-          "station": "sweep",
+          "station": [
+            "sweep",
+            "sweep2",
+            "sweep3"
+          ],
           "seconds": 4
         }
       ]
@@ -648,7 +744,11 @@
       "group": "shop",
       "steps": [
         {
-          "station": "window",
+          "station": [
+            "window",
+            "window2",
+            "window3"
+          ],
           "seconds": 3
         }
       ]
@@ -749,11 +849,11 @@
       "for": "crisis"
     },
     {
-      "id": "wellwater",
-      "name": "井戸の水",
-      "room": "中庭",
-      "x": 34,
-      "y": 26,
+      "id": "iceblock",
+      "name": "氷室の氷",
+      "room": "氷室",
+      "x": 5,
+      "y": 33,
       "for": "crisis"
     }
   ],

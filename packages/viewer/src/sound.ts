@@ -9,7 +9,7 @@ import { FIRED } from './show.ts';
 import type { Cue, Show } from './show.ts';
 import { rand } from './theme.ts';
 
-export type Effect = 'bell' | 'nap' | 'cutin' | 'pon' | 'lightsOut' | 'alarm' | 'shut' | 'open' | 'relief' | 'creak' | 'flip' | 'thud' | 'stamp' | 'fanfareWin' | 'fanfareLose' | 'peek' | 'monitor';
+export type Effect = 'divine' | 'curse' | 'bell' | 'nap' | 'cutin' | 'pon' | 'lightsOut' | 'alarm' | 'shut' | 'open' | 'relief' | 'creak' | 'flip' | 'thud' | 'stamp' | 'fanfareWin' | 'fanfareLose' | 'peek' | 'monitor';
 
 /**
  * できごとで鳴らす効果音。役職を隠している時（secrets が false）は、音で役職や床下の人が分からないようにする。
@@ -21,6 +21,9 @@ export function effectOf(event: Cue['event'], secrets: boolean): Effect | null {
       return 'bell';
     case 'nap':
       return 'nap';
+    // 占いは、まわりの人には見えない。役職を見せている時だけ鳴らす。占われた狐が餅になる音は、どちらの時も鳴る
+    case 'divine':
+      return event.cursed ? (secrets ? 'curse' : 'nap') : secrets ? 'divine' : null;
     // ふりの仕込みは、役職を見せている時だけ無音にする（隠している時に、音で見分けがつかないように）
     case 'task':
       return !event.pretend || !secrets ? 'pon' : null;
@@ -192,6 +195,12 @@ export class Sound {
     this.base = at;
     if (effect === 'bell') this.bell();
     else if (effect === 'nap') this.nap();
+    else if (effect === 'divine') this.divine();
+    else if (effect === 'curse') {
+      this.divine();
+      this.base = at === null ? null : at + 0.3;
+      this.nap();
+    }
     else if (effect === 'cutin') this.cutin();
     else if (effect === 'pon') this.pon();
     else if (effect === 'lightsOut') this.lightsOut();
@@ -327,6 +336,12 @@ export class Sound {
     this.tone(1047, 0, 0.18, { slideTo: 1568, gain: 0.12, type: 'triangle' });
     this.tone(1568, 0.08, 0.16, { slideTo: 2093, gain: 0.08, type: 'triangle' });
     this.tone(392, 0.22, 0.42, { slideTo: 262, gain: 0.2, type: 'sine' });
+  }
+
+  /** 占い師の玉が光る（高い音が、しゃらんと重なって上がる）。 */
+  divine(): void {
+    for (const [freq, delay] of [[1175, 0], [1568, 0.07], [1976, 0.14], [2349, 0.21]] as const) this.tone(freq, delay, 0.75, { type: 'sine', gain: 0.075, attack: 0.012 });
+    this.tone(587, 0, 0.9, { type: 'triangle', gain: 0.05, slideTo: 880 });
   }
 
   /** 仕込みが1つ終わった（小さく、ぽん）。 */

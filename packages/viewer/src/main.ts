@@ -2,7 +2,10 @@
 //
 //   ?seed=<数>     試合の種（同じ種なら、同じ試合になる。省くと、でたらめに選ぶ）
 //   ?players=<数>  人数（5〜12。既定は11）
-//   ?foxes=<数>    狐の人数（既定は0）
+//   ?foxes=<数>    狐の人数（0か1。既定は、9人以上なら1）
+//   ?seers=<数>    占い師の人数（0か1。既定は、9人以上なら1）
+//   ?madmen=<数>   妖精マニアの人数（0か1。既定は、9人以上なら1）
+//                  3つとも0にすると、妖精と従業員だけの試合になる
 //   ?secrets=0     役職と内心を隠す
 //   ?speed=2       速さ
 //   ?sfx=0         音を出さない
@@ -44,7 +47,10 @@ const clampInt = (value: string | null, min: number, max: number, fallback: numb
   return value !== null && Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 const players = clampInt(params.get('players'), 5, 12, 11);
-const foxes = clampInt(params.get('foxes'), 0, 1, 0);
+const extra = players >= 9 ? 1 : 0;
+const foxes = clampInt(params.get('foxes'), 0, 1, extra);
+const seers = clampInt(params.get('seers'), 0, 1, extra);
+const madmen = clampInt(params.get('madmen'), 0, 1, extra);
 
 let show: Show | null = null;
 let stage: Stage | null = null;
@@ -137,7 +143,7 @@ async function open(seed: number, autoplay: boolean): Promise<void> {
   // 文字を描いてから、試合を回す（回している間は、画面が止まるため）
   await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
   try {
-    const log = await runMatch({ seed, map: workshop as unknown as MapDefinition, players, roam: { foxes }, brains: [null], denyList: [] });
+    const log = await runMatch({ seed, map: workshop as unknown as MapDefinition, players, roam: { foxes, seers, madmen }, brains: [null], denyList: [] });
     if (mine !== building) return;
     show = buildShow(log, null);
     stage = new Stage(show);

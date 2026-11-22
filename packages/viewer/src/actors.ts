@@ -37,12 +37,18 @@ export interface ActorLook {
   shadow?: boolean;
   /** 持ち場で手を動かしている（体を小さくはずませて、両手を交互に動かす）。 */
   working?: boolean;
+  /**
+   * 手をかざしている（side: かざす相手のいる側。k: 上げ具合 0〜1）。その側の手を、相手のほうへ高く上げて、手のひらを光らせる。
+   */
+  reach?: { side: -1 | 1; k: number };
   /** 心だけの姿（うすく、青白く、床から少し浮いている。影は無い）。 */
   dream?: boolean;
   /** ずんだの妖精の羽（役職を見せている時だけ）。 */
   wings?: boolean;
   /** 狐のしっぽ（役職を見せている時だけ）。 */
   tail?: boolean;
+  /** 占い師の玉（役職を見せている時だけ）。肩のうしろに、ふわふわ浮かぶ。 */
+  orb?: boolean;
   /** 登場人物の名前（characters.ts に絵があれば、その見た目で描く）。 */
   character?: string;
   /** 歩く足どり・手の動きに使う時刻（無ければ time）。絵をゆっくり流す所では、試合の中の時計を渡して、足どりも遅くする。 */
@@ -50,6 +56,9 @@ export interface ActorLook {
 }
 
 const R = 22; // 体の半径（scale 1 のとき）
+/** 手をかざした時に、手が体の横へ出る幅と、上がる高さ（体の半径に対する割合）。カットインの光の出どころ（cutin.ts）も、これに合わせる。 */
+export const REACH_OUT = 0.75;
+export const REACH_UP = 0.5;
 
 export function drawActor(ctx: Ctx, look: ActorLook): void {
   if (look.asleep) {
@@ -154,7 +163,28 @@ export function drawActor(ctx: Ctx, look: ActorLook): void {
 
   // 手（仕込みの最中は、体の前で交互に上げ下げする）
   const wave = look.walking ? Math.sin(phase) * 3 : 0;
+  const reach = look.reach ? Math.max(0, Math.min(1, look.reach.k)) : 0;
   for (const side of [-1, 1]) {
+    if (reach > 0 && look.reach && side === look.reach.side) {
+      // 手をかざす: 相手の側の手を、体の横から、相手のほうへ突き出す（肩の高さ）。出しきると、手のひらがずんだ色に光る
+      const hx = side * (R - 1 + reach * R * REACH_OUT);
+      const hy = R * 0.18 - reach * R * REACH_UP + Math.sin(time * 14 + seed) * reach * 0.8;
+      if (reach > 0.55) {
+        const glow = (reach - 0.55) / 0.45;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(hx + side * 2, hy - 1, 9 + glow * 5 + Math.sin(time * 11) * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(156, 204, 82, ${0.42 * glow})`;
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.beginPath();
+      ctx.ellipse(hx, hy, 5.2 + reach * 0.8, 6.2 + reach * 1.4, side * 0.2 * reach, 0, Math.PI * 2);
+      ctx.fillStyle = look.dream ? '#eef2ff' : MOCHI;
+      ctx.fill();
+      ctx.stroke();
+      continue;
+    }
     ctx.beginPath();
     if (look.working) ctx.ellipse(side * (R * 0.52) + facing * R * 0.34, R * 0.02 + Math.sin(work + (side === 1 ? 0 : Math.PI)) * R * 0.3, 4.8, 5.8, 0, 0, Math.PI * 2);
     else ctx.ellipse(side * (R - 1), R * 0.18 + side * wave * 0.5, 4.6, 5.6, 0, 0, Math.PI * 2);
@@ -163,6 +193,40 @@ export function drawActor(ctx: Ctx, look: ActorLook): void {
     ctx.stroke();
   }
   ctx.restore();
+  if (look.orb) drawOrb(ctx, time, seed, facing);
+  ctx.restore();
+}
+
+/** 占い師の玉。向きと反対側の肩の上に浮かんで、ゆっくり光る（台は無い）。 */
+function drawOrb(ctx: Ctx, time: number, seed: number, facing: number): void {
+  const x = -facing * R * 1.18;
+  const y = -R * 1.72 + Math.sin(time * 2.1 + seed) * 2.4;
+  const r = R * 0.36;
+  const glow = 0.6 + 0.4 * Math.sin(time * 3 + seed * 1.3);
+  ctx.save();
+  const halo = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2.3);
+  halo.addColorStop(0, `rgba(200, 170, 255, ${0.55 * glow})`);
+  halo.addColorStop(1, 'rgba(200, 170, 255, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 2.3, 0, Math.PI * 2);
+  ctx.fill();
+  const body = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+  body.addColorStop(0, '#ffffff');
+  body.addColorStop(0.45, '#d0bfff');
+  body.addColorStop(1, '#7048e8');
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#3b2a6e';
+  ctx.stroke();
+  // 玉の中の小さな星
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + 0.5 * glow})`;
+  ctx.beginPath();
+  ctx.arc(x + r * 0.28, y + r * 0.2, r * 0.13, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 

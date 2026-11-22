@@ -22,8 +22,11 @@ const NEAR_TILES = 13;
 const TALK_TILES = 9;
 /** 道具を見ている人を映す長さの上限（秒）。防犯カメラは長く見続けることがあるので、頭のこの秒数だけ。 */
 const LOOK_SHOT_MAX = 6;
+/** 餅に変わった瞬間から、その場面を映し続ける秒数。 */
+const NAP_HOLD = 3.4;
+/** 見られた抜け道の出口の前で切った「餅に変える場面」に、残す長さ（秒）。前の場面を早めに切り上げて作る。 */
+const NAP_BEFORE_EXIT = 2.4;
 /**
- * 遠くへ切り替えるまでに、同じ場所を映し続ける秒数（瞬間移動が多すぎると、ごちゃごちゃして見づらいため）。
  * 声は工房のあちこちから順に鳴るので、声のたびに追うと、数秒ごとに別の部屋へ飛ぶ。遠くの声は、この秒数がたつまでは追わず、
  * 字幕（話している人の名前つき）だけで聞かせる。見どころ（餅に変える・知らせる・鐘・妨害・直す・抜け道）は、いつでも追う。
  */
@@ -32,6 +35,10 @@ export const HOLD_SECONDS = 14;
 const BRIDGE_SECONDS = 20;
 /** ふたりを映す場面を延ばしてよい、ふたりの離れ具合の上限（升）。 */
 const PAIR_KEEP_TILES = 8;
+/** 餅を見たのに通りすぎた人の、餅にいちばん近づいた時をさがす長さ（答えが返った時から、この秒数だけさかのぼる）。 */
+const PASS_LOOK_BACK = 8;
+/** 餅にいちばん近づいてから、餅と一緒に映し続ける秒数。 */
+const PASS_PAIR_AFTER = 1.4;
 
 export interface Shot {
   start: number;
@@ -46,9 +53,10 @@ export interface Shot {
   /**
    * start: 見回りの始まり / patrol: 順番に追う / target: このあと狙われる人 / nap: ずんだ餅に変える（名前は前の題材のなごり） / report: 見つけて知らせる /
    * bell: 中庭の鐘を鳴らしに行く / sabotage: 妨害が始まる / fix: 困りごとを直す / sneak: 床下の抜け道を通る / chat: 声に出して話している /
-   * look: 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見ている
+   * look: 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見ている /
+   * pass: ずんだ餅を見たのに、知らせる前に通りすぎる
    */
-  why: 'start' | 'patrol' | 'target' | 'nap' | 'report' | 'bell' | 'sabotage' | 'fix' | 'sneak' | 'chat' | 'look';
+  why: 'start' | 'patrol' | 'target' | 'nap' | 'divine' | 'report' | 'bell' | 'sabotage' | 'fix' | 'sneak' | 'chat' | 'look' | 'pass';
   /** place のとき、映す場所（升目の座標）。 */
   at?: { x: number; y: number };
 }
@@ -142,6 +150,8 @@ export class Director {
 
     // 見どころ。key は、その場面でいちばん見せたい瞬間（ほかの見どころと重なった時も、ここは残す）
     const naps: Shot[] = [];
+    /** 抜け道から出てくる所を、妖精でない人に見られた瞬間（渡す場面と同じく、必ず映す）。 */
+    const seenExits: Shot[] = [];
     const extras: { shot: Shot; key: number; rank: number }[] = [];
     for (const cue of cues) {
       const { event } = cue;
@@ -153,14 +163,71 @@ export class Director {
           // 行動の名前は transform（前の題材の記録では nap）
           const decided = cues.filter((c) => c.event.type === 'decide' && c.event.agent === event.by && c.event.applied && (c.event.action.startsWith('transform') || c.event.action.startsWith('nap')) && c.at <= cue.at).at(-1);
           const lead = Math.min(7, Math.max(2.5, cue.at - (decided?.at ?? cue.at) + 0.6));
-          naps.push({ start: cue.at - lead, end: cue.at + 3.4, kind: 'pair', subject: giver, other: target, zoom: ZOOM.close, why: 'nap' });
+          naps.push({ start: cue.at - lead, end: cue.at + NAP_HOLD, kind: 'pair', subject: giver, other: target, zoom: ZOOM.close, why: 'nap' });
         } else {
           // 役職を隠している時は、誰が渡したかを先に教えない
-          naps.push({ start: cue.at - 0.2, end: cue.at + 3.4, kind: 'follow', subject: target, other: target, zoom: ZOOM.close, why: 'nap' });
+          naps.push({ start: cue.at - 0.2, end: cue.at + NAP_HOLD, kind: 'follow', subject: target, other: target, zoom: ZOOM.close, why: 'nap' });
+        }
+      } else if (event.type === 'nap_failed') {
+        // 妖精が狐に手をかざしたが、餅にならなかった（役職を見せている時だけ。手をかざすと決めた所から）
+        if (secrets) {
+          const decided = cues.filter((c) => c.event.type === 'decide' && c.event.agent === event.by && c.event.applied && c.event.action.startsWith('transform') && c.at <= cue.at).at(-1);
+          const lead = Math.min(6, Math.max(2.2, cue.at - (decided?.at ?? cue.at) + 0.6));
+          extras.push({ shot: { start: cue.at - lead, end: cue.at + 3.4, kind: 'pair', subject: this.seatOf(event.by), other: this.seatOf(event.target), zoom: ZOOM.close, why: 'nap' }, key: cue.at + 0.3, rank: 0 });
+        }
+      } else if (event.type === 'divine') {
+        const seer = this.seatOf(event.by);
+        const target = this.seatOf(event.target);
+        if (secrets) {
+          // 占うと決めて近づく所から、結果の札が消えるまで。狐が餅になる時は、餅に変わる時と同じあつかい（ほかの見どころより先）
+          const decided = lastDecided(event.by, 'divine', cue.at);
+          const lead = Math.min(6, Math.max(2.2, cue.at - (decided?.at ?? cue.at) + 0.6));
+          // 案内役が結果を言い終わるのが遅い時は、札が消える（cue.end + 0.8）まで映す
+          const shot: Shot = { start: cue.at - lead, end: Math.max(cue.at + 3.6, cue.end + 1), kind: 'pair', subject: seer, other: target, zoom: ZOOM.close, why: 'divine' };
+          if (event.cursed) naps.push(shot);
+          else extras.push({ shot, key: cue.at + 0.3, rank: 0 });
+        } else if (event.cursed) {
+          // 役職を隠している時は、誰が占ったかを教えない（急に餅になった人だけを映す）
+          naps.push({ start: cue.at - 0.2, end: cue.at + 3.4, kind: 'follow', subject: target, other: target, zoom: ZOOM.close, why: 'divine' });
         }
       } else if (event.type === 'decide' && event.action === 'report' && event.applied) {
         const reporter = this.seatOf(event.agent);
-        extras.push({ shot: { start: cue.at - 3.6, end: cue.at + 0.02, kind: 'follow', subject: reporter, other: reporter, zoom: ZOOM.close, why: 'report' }, key: cue.at - 0.05, rank: 0 });
+        // 「知らせる」と決めた時と、知らせた時（見回りの終わり）が離れる。決めた所から、餅のそばに着いて知らせる瞬間まで追う。
+        // 途中でやめた時（ほかの人が先に知らせた、など）は、追わない。その前の試合（決めた瞬間に知らせている）は、今までと同じ
+        const told = end - ((segment as { held?: number }).held ?? 0);
+        // 次の区切りは、時刻でさがす（同じ試合から作った別の上映の区切りを渡されても、同じ答えになるように）
+        const after = this.show.segments.find((s) => s.start >= end - 0.01);
+        const leads = after?.kind === 'meeting' && after.info.kind === 'report' && after.info.reporter === event.agent && lastDecided(event.agent, 'report', Infinity) === cue;
+        if (told - cue.at <= 0.3) {
+          extras.push({ shot: { start: cue.at - 3.6, end: cue.at + 0.02, kind: 'follow', subject: reporter, other: reporter, zoom: ZOOM.close, why: 'report' }, key: cue.at - 0.05, rank: 0 });
+        } else if (leads) {
+          extras.push({ shot: { start: Math.min(cue.at - 1.2, told - 3.6), end: told + 0.02, kind: 'follow', subject: reporter, other: reporter, zoom: ZOOM.close, why: 'report' }, key: told - 0.05, rank: 0 });
+        }
+      } else if (event.type === 'decide' && event.action === 'report' && !event.applied && event.target && /見えていません/.test(event.note ?? '')) {
+        // ずんだ餅を見て知らせようとしたが、答えが返った時には、もう通りすぎていた人。
+        // 餅にいちばん近づいた時の少し前から、答えが返る時まで。このすぐあとに、案内役が「見たのに、知らせそこねた」と言う（narration.ts の saw）
+        const walker = this.seatOf(event.agent);
+        const mochi = this.seatOf(event.target);
+        let near = cue.at;
+        let closest = Infinity;
+        for (let time = Math.max(start, cue.at - PASS_LOOK_BACK); time <= cue.at; time += 0.2) {
+          const poses = posesOn(time);
+          const a = poses[walker];
+          const b = poses[mochi];
+          if (!a || !b || a.state === 'x' || b.state === 'x') continue;
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < closest) {
+            closest = d;
+            near = time;
+          }
+        }
+        // 始まりは、近づく1秒前（その前に、妖精が抜け道へもぐる所などを映していることがあるので、長くは取らない）
+        if (Number.isFinite(closest)) {
+          // 餅と一緒に映すのは、通りすぎる間だけ。そのあとは本人を追う（離れていく2人を一緒に映すと、本人が字幕の後ろへ行く）
+          const split = Math.min(cue.at, near + PASS_PAIR_AFTER);
+          extras.push({ shot: { start: near - 1, end: split, kind: 'pair', subject: walker, other: mochi, zoom: ZOOM.follow, why: 'pass' }, key: near, rank: 0 });
+          extras.push({ shot: { start: split, end: cue.at + 0.3, kind: 'follow', subject: walker, other: walker, zoom: ZOOM.follow, why: 'pass' }, key: split + 0.2, rank: 0 });
+        }
       } else if (event.type === 'bell') {
         // 鐘を鳴らしに行くと決めた時から、鐘の前に着くまで
         const ringer = this.seatOf(event.by);
@@ -205,6 +272,11 @@ export class Director {
         const out = span && Number.isFinite(span.end) ? span.end : cue.at;
         const seat = this.seatOf(event.by);
         extras.push({ shot: { start: cue.at - 2.2, end: out + 1.6, kind: 'follow', subject: seat, other: seat, zoom: ZOOM.close, why: 'sneak' }, key: cue.at, rank: 4 });
+      } else if (event.type === 'sneak' && event.phase === 'out' && secrets) {
+        // 抜け道から出てくる所を、妖精でない人に見られた時は、その瞬間を、見た人と一緒に必ず映す。
+        // （同じ時刻に別の場所で餅に変える場面があると、カメラがそちらへ行って、出てくる所が映らないことがあった）
+        const eye = event.witnesses.map((name) => this.cast.find((member) => member.name === name)).find((member) => member !== undefined && !member.nibbler);
+        if (eye) seenExits.push({ start: cue.at - 1, end: cue.at + 2.2, kind: 'pair', subject: this.seatOf(event.by), other: eye.seat, zoom: ZOOM.close, why: 'sneak' });
       }
     }
     // 話している所。続けて交わされた声（近くの人どうし）は、ひとつの場面にまとめる。ほかの見どころより後回し。
@@ -242,6 +314,26 @@ export class Director {
     }
     closeTalk();
 
+    // 見られた抜け道の出口は、渡す場面より先に取る（重なる渡す場面は、出口の前で切る。出口の間に始まるものは、出口のあとへ）
+    const napMoment = new Map(naps.filter((shot) => shot.why === 'nap').map((shot) => [shot, shot.end - NAP_HOLD] as const));
+    for (const exit of seenExits) {
+      for (const shot of naps) {
+        if (shot.end <= exit.start || shot.start >= exit.end) continue;
+        if (shot.start >= exit.start) {
+          shot.start = exit.end;
+          continue;
+        }
+        shot.end = exit.start;
+        // 出口の前で切った場面が、その前の渡す場面に押されて一瞬だけにならないように、前の場面を早めに切り上げる
+        // （前の場面も、餅に変わった所を 1.2 秒は見せる）
+        for (const before of naps) {
+          const moment = napMoment.get(before);
+          if (before === shot || moment === undefined || before.start > shot.start || before.end <= shot.start) continue;
+          before.end = Math.max(moment + 1.2, Math.min(before.end, shot.end - NAP_BEFORE_EXIT));
+        }
+      }
+      naps.push(exit);
+    }
     // 渡す場面を先に取り、ほかの見どころは、その残りの時間に入れる（渡す場面を削らない）
     const busy: Shot[] = [];
     let floor = start;
@@ -262,7 +354,7 @@ export class Director {
         else if (other.start > key) shot.end = other.start;
         else free = false;
       }
-      if (!free || shot.end - shot.start < (shot.why === 'report' || shot.why === 'bell' ? 0.4 : 1.4)) continue;
+      if (!free || shot.end - shot.start < (shot.why === 'report' || shot.why === 'bell' || shot.why === 'pass' ? 0.4 : 1.4)) continue;
       busy.push(shot);
     }
     busy.sort((a, b) => a.start - b.start);

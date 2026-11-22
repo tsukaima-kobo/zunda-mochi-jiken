@@ -1,7 +1,7 @@
-// 広い工房・11人の試合の決まり（仕込み、困りごと、戸、床下の抜け道、心だけの人、鐘、妖精びいき）が、
+// 広い工房・11人の試合の決まり（仕込み、困りごと、戸、床下の抜け道、心だけの人、鐘、妖精マニア）が、
 // 記録だけから、時刻の関数として上映の時間軸に乗ること。
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runMatch } from '../../server/src/index.ts';
@@ -16,15 +16,17 @@ import { colorOf, ejectTruth, ejectVerdict, H, plainThought, ROLE_COLOR, ROLE_LA
 const load = (name: string) => JSON.parse(readFileSync(path.resolve(import.meta.dirname, `../../../content/maps/${name}.json`), 'utf8'));
 const big = load('workshop');
 /** 前の題材のころの、実物の頭脳の記録（この機体にあれば確かめる）。 */
+const OLD_REAL = path.resolve(import.meta.dirname, '../../../matches/m43-20261116T233146/match.json');
 const small = load('workshop-small');
 
 const logs = new Map<string, Promise<MatchLog>>();
-/** 台本ボットだけの、11人の試合（同じ種は1回だけ回す）。fan なら、狐の代わりに妖精びいきを入れる。 */
+/** 台本ボットだけの、11人の試合（同じ種は1回だけ回す）。fan なら、狐の代わりに妖精マニアを入れる。 */
 function play(seed: number, fan = false): Promise<MatchLog> {
   const key = `${seed}:${fan}`;
   let log = logs.get(key);
   if (!log) {
-    log = runMatch({ seed, map: big, players: 11, brains: [null], denyList: [], ...(fan ? { roam: { madmen: 1, foxes: 0 } } : {}) });
+    // カメラの係の試験は、前の試合の中身（狐の横取りに条件の無い決まり）で確かめる。条件を足すと台本ボットの狐の動きが変わり、試合の中身が変わるため（2026-11-21）
+    log = runMatch({ seed, map: big, players: 11, brains: [null], denyList: [], roam: fan ? { madmen: 1, foxes: 0 } : { foxSteps: 0 } });
     logs.set(key, log);
   }
   return log;
@@ -36,9 +38,11 @@ const cuesOf = <T extends MatchLog['events'][number]['type']>(show: Show, type: 
 /** 上映の時刻が、どの見回りの中か。 */
 const roamAt = (show: Show, time: number) => roamsOf(show).find((roam) => time >= roam.start - 1e-6 && time <= roam.end + 1e-6);
 
-// 台本ボットは名前を乱数のたねに使うので、登場人物の名前やルールを変えると試合が変わる。そのたびに種を選び直す。
-// 55: 仕込みが全部終わる・戸（閉まった部屋をカメラが映す）・抜け道 / 25: 戸・鐘（鳴らした人を映す） / 72: あかり・かまど・抜け道・鐘
-const SEEDS = [55, 25, 72];
+// 登場人物の名前が変わると、台本ボットの動きも変わる（名前を含む発言に反応するため）。そのたびに選び直す
+// 25: 妨害・戸（閉まった部屋をカメラが映す）・抜け道 / 34: 中庭の鐘と、開店に間に合わない / 12: 仕込みが終わる / 54: 中庭の鐘
+// 公開版の登場人物（色の名前の餅）で選んだ種。台本ボットは名前を乱数に使うので、登場人物が変わると試合も変わる。
+// 68: 仕込みが終わって勝つ・鐘・戸・抜け道・かまど / 25・51: あかり・かまど・戸・抜け道。3つで、妨害3種・直す・戸が開く・抜け道・鐘がそろう（台本ボットで鐘が鳴る種は少ない）
+const SEEDS = [68, 25, 51];
 
 describe('見回りの新しいできごとの時間軸', () => {
   it('仕込み・妨害・直した・戸・抜け道・鐘は、起きた時刻に並ぶ', async () => {
@@ -221,7 +225,7 @@ describe('見回りの新しいできごとの時間軸', () => {
     expect(passed).toBeGreaterThan(0);
   });
 
-  it('心だけの姿は、ずんだ餅になった従業員にだけ出る（妖精と妖精びいきには出ない）', async () => {
+  it('心だけの姿は、ずんだ餅になった従業員にだけ出る（妖精と妖精マニアには出ない）', async () => {
     let dreams = 0;
     for (const seed of SEEDS) {
       const log = await play(seed);
@@ -295,7 +299,7 @@ describe('見回りの新しいできごとの時間軸', () => {
   });
 });
 
-describe('カメラの係（11人・妖精2人・妖精びいき1人）', () => {
+describe('カメラの係（11人・妖精2人・妖精マニア1人）', () => {
   const sites: Sites = {
     rooms: Object.fromEntries(Object.entries(doorRectsOf(big)).map(([room, doors]) => [room, { x: doors[0]!.x + 0.5, y: doors[0]!.y + 0.5 }])),
     fix: {
@@ -358,7 +362,10 @@ describe('カメラの係（11人・妖精2人・妖精びいき1人）', () => 
               expect(camera.subject).toBeNull();
             }
           } else if (shot.why === 'sneak') {
-            expect(show.sneaks.some((span) => span.seat === shot.subject && span.start >= shot.start - 1e-6 && span.start <= shot.end)).toBe(true);
+            // 床下へもぐる所か、出てくる所を妖精でない人に見られた瞬間（2026-11-22 から。見た人と一緒に映す）
+            const dive = show.sneaks.some((span) => span.seat === shot.subject && span.start >= shot.start - 1e-6 && span.start <= shot.end);
+            const seenExit = shot.kind === 'pair' && show.sneaks.some((span) => span.seat === shot.subject && span.seenOut.length > 0 && span.end >= shot.start - 1e-6 && span.end <= shot.end + 1e-6);
+            expect(dive || seenExit).toBe(true);
           } else if (shot.why === 'bell') {
             // 鐘のあと、最後の声が言い終わるまで絵を止めて待つ分（held）を除いた所が、鐘を鳴らした時刻
             const bell = cuesOf(show, 'bell').find((cue) => Math.abs(cue.at - (roam.end - (roam.held ?? 0))) < 1e-6)!;
@@ -373,9 +380,9 @@ describe('カメラの係（11人・妖精2人・妖精びいき1人）', () => 
   });
 
   it('見回りを順に追う時は、起きている妖精を、かわるがわる映す', async () => {
-    // 1回目の見回りが長い（90秒）種。2人とも起きていて、順に追う場面が何度もある。
+    // 2人とも起きていて、順に追う場面が何度もある種（公開版の登場人物で選んだ）。
     // 話している所のあいだは、よそへ飛ばずに映し続けるので（director.ts の HOLD_SECONDS）、順に追う場面は少ない。試合を通して、2人とも映す
-    const { director, roams, cast } = await stage(7);
+    const { director, roams, cast } = await stage(51);
     const nibblers = cast.filter((c) => c.nibbler).map((c) => c.seat);
     const patrol = roams.flatMap((roam) => director.shotsFor(roam, true).filter((shot) => shot.why === 'patrol').map((shot) => shot.subject));
     for (const seat of nibblers) expect(patrol).toContain(seat);
@@ -486,20 +493,24 @@ describe('11人の名前と言い回し', () => {
   });
 });
 
-describe('ずんだの妖精・妖精びいき・狐', () => {
-  it('妖精びいきと狐には、従業員とも妖精とも違う色と呼び名がある', () => {
-    expect(ROLE_LABEL).toEqual({ artisan: '従業員', nibbler: 'ずんだの妖精', madman: '妖精びいき', fox: '狐' });
+describe('ずんだの妖精・妖精マニア・狐', () => {
+  it('妖精マニアと狐には、従業員とも妖精とも違う色と呼び名がある', () => {
+    expect(ROLE_LABEL).toEqual({ artisan: '従業員', nibbler: 'ずんだの妖精', madman: '妖精マニア', fox: '狐', seer: '占い師' });
     expect(ROLE_SHORT.nibbler).toBe('妖精');
-    expect(new Set([ROLE_COLOR.artisan, ROLE_COLOR.nibbler, ROLE_COLOR.madman, ROLE_COLOR.fox]).size).toBe(4);
-    expect(SIDE_OF).toEqual({ artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox' });
-    expect(ejectVerdict('fox')).toEqual(ejectVerdict('artisan'));
-    expect(ejectTruth('fox', true)).toBe('本当は 狐');
+    expect(new Set([ROLE_COLOR.artisan, ROLE_COLOR.nibbler, ROLE_COLOR.madman, ROLE_COLOR.fox, ROLE_COLOR.seer]).size).toBe(5);
+    expect(SIDE_OF).toEqual({ artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' });
+    expect(ejectVerdict('seer')).toEqual(ejectVerdict('artisan'));
+    expect(ejectTruth('seer', true)).toBe('本当は占い師');
+    // クビになった狐は、全員に「狐だった」と知らされる（2026-11-21 から）。全員に知らされたことと同じなので、観戦者だけの付箋は出さない
+    expect(ejectVerdict('fox')).toEqual({ text: '狐だった', fairy: false, fox: true });
+    expect(ejectTruth('fox', true)).toBeNull();
   });
 
-  it('クビになった妖精びいきは、全員には従業員と同じ「妖精ではなかった」と出て、観戦者にだけ本当の役職が出る', async () => {
+  it('クビになった妖精マニアは、全員には従業員と同じ「妖精ではなかった」と出て、観戦者にだけ本当の役職が出る', async () => {
     let found = 0;
-    // 105・118: 妖精びいきがクビになる種
-    for (const seed of [105, 118]) {
+    // 妖精マニアがクビになる種（2026-11-19、工房の道具を足した時に選び直した。2026-11-21 夜、焚きすぎの直す場所を氷室へ移して 17・37 に、同じ夜に仕込みの配り方を変えて 2・22、仕込みを3つずつ出す決まりにして 41・74 に選び直した）
+    // 2026-11-22、餅のすぐそばまで歩いてから知らせる決まりにして、113・169 に選び直した
+    for (const seed of [113, 169]) {
       const log = await play(seed, true);
       const withMadman = log.players.some((p) => p.role === 'madman');
       expect(withMadman).toBe(true);
@@ -508,18 +519,18 @@ describe('ずんだの妖精・妖精びいき・狐', () => {
         found++;
         expect(ejectVerdict('madman')).toEqual(ejectVerdict('artisan'));
         expect(ejectVerdict('madman').text).toBe('妖精ではなかった');
-        expect(ejectTruth('madman', withMadman)).toBe('本当は 妖精びいき');
+        expect(ejectTruth('madman', withMadman)).toBe('本当は妖精マニア');
       }
     }
     expect(found).toBeGreaterThan(0);
-    expect(ejectVerdict('nibbler')).toEqual({ text: '妖精だった', fairy: true });
+    expect(ejectVerdict('nibbler')).toEqual({ text: '妖精だった', fairy: true, fox: false });
     expect(ejectTruth('nibbler', true)).toBeNull();
-    // 妖精びいきのいない試合では、従業員だったことは「妖精ではなかった」で分かるので、重ねて出さない
+    // 妖精マニアのいない試合では、従業員だったことは「妖精ではなかった」で分かるので、重ねて出さない
     expect(ejectTruth('artisan', false)).toBeNull();
     expect(ejectTruth('artisan', true)).toBe('従業員だった');
   });
 
-  it('前の題材の記録（行動の名前が nap、妖精びいきがいない）でも、時間軸を作れる', async () => {
+  it('前の題材の記録（行動の名前が nap、妖精マニアがいない）でも、時間軸を作れる', async () => {
     const modern = await play(9);
     const old = {
       ...modern,
@@ -544,4 +555,10 @@ describe('ずんだの妖精・妖精びいき・狐', () => {
     expect(shots.some((shot) => shot.why === 'nap')).toBe(true);
   });
 
+  it.skipIf(!existsSync(OLD_REAL))('保存してある前の題材の実物の記録（m43）も、時間軸を作れる', () => {
+    const log = JSON.parse(readFileSync(OLD_REAL, 'utf8')) as MatchLog;
+    const show = buildShow(log, null);
+    expect(show.segments.at(-1)?.kind).toBe('ending');
+    expect(show.total).toBeGreaterThan(60);
+  });
 });

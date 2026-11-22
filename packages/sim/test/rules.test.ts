@@ -1,4 +1,4 @@
-// 仕込み・鐘・妨害・抜け道・心だけの仕込み・妖精2人・妖精びいき・狐の決まり（広い工房のマップで確かめる）。勝ち負けを確かめる所は、狐を入れない（起きた狐が勝ちを横取りするので）。
+// 仕込み・鐘・妨害・抜け道・心だけの仕込み・妖精2人・妖精マニア・狐・占い師の決まり（広い工房のマップで確かめる）。勝ち負けを確かめる所は、狐を入れない（起きた狐が勝ちを横取りするので）。
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import {
   applyRoamIntent,
   applySpeak,
   areaAt,
+  buildObservation,
   buildRoamObservation,
   centerOf,
   createRoamWorld,
@@ -25,6 +26,7 @@ import {
   visibleTo,
 } from '../src/index.ts';
 import type { Ballot, MapDefinition, PlayerId, RoamWorld } from '../src/index.ts';
+import { roamActions } from '../../protocol/src/index.ts';
 
 const mapDef = JSON.parse(readFileSync(path.resolve(import.meta.dirname, '../../../content/maps/workshop.json'), 'utf8')) as MapDefinition;
 
@@ -54,13 +56,14 @@ function stage(seed = 1, roam: Partial<RoamWorld['roam']> = {}) {
   const nibblers = w.truth.nibblerIds as [PlayerId, PlayerId];
   const madmen = w.truth.madmanIds;
   const foxes = w.truth.foxIds;
-  const artisans = w.roster.filter((id) => !nibblers.includes(id) && !madmen.includes(id) && !foxes.includes(id));
+  const seers = w.truth.seerIds;
+  const artisans = w.roster.filter((id) => !nibblers.includes(id) && !madmen.includes(id) && !foxes.includes(id) && !seers.includes(id));
   w.roster.forEach((id, i) => place(w, id, 58 + i, 43));
   for (const id of nibblers) w.napReadyAt[id] = 0;
   w.sabotageReadyAt = 0;
   w.doorReadyAt = 0;
   w.bellReadyAt = 0;
-  return { w, nibblers, madmen, foxes, artisans: artisans as [PlayerId, PlayerId, PlayerId, ...PlayerId[]] };
+  return { w, nibblers, madmen, foxes, seers, artisans: artisans as [PlayerId, PlayerId, PlayerId, ...PlayerId[]] };
 }
 
 /**
@@ -70,7 +73,7 @@ function stage(seed = 1, roam: Partial<RoamWorld['roam']> = {}) {
 function giveCard(w: RoamWorld, id: PlayerId): void {
   const actor = actorById(w, id);
   if (actor.duties.some((duty) => duty.name === '出勤カードを切る')) return;
-  actor.duties.unshift({ name: '出勤カードを切る', steps: [{ station: 'card', what: '出勤カードを切る', room: '帳場', seconds: Math.max(1, Math.round(3 * w.roam.dutyPace)), done: false }] });
+  actor.duties.unshift({ name: '出勤カードを切る', shown: true, steps: [{ station: 'card', what: '出勤カードを切る', room: '帳場', seconds: Math.max(1, Math.round(3 * w.roam.dutyPace)), done: false }] });
   if (!actor.nibbler && !actor.madman && !actor.fox) w.taskTotal += 1;
 }
 
@@ -88,7 +91,6 @@ describe('人数と役職', () => {
     expect(createRoamWorld({ seed: 1, map: mapDef, players: 8, roam: { nibblers: 2 } }).truth.nibblerIds).toHaveLength(2);
     expect(createRoamWorld({ seed: 1, map: mapDef, players: 11, roam: { nibblers: 1 } }).truth.nibblerIds).toHaveLength(1);
     // 登場人物は12人。13人目はいない
-    expect(createRoamWorld({ seed: 1, map: mapDef, players: 11 }).roster).toHaveLength(11);
     expect(createRoamWorld({ seed: 1, map: mapDef, players: 12 }).roster).toHaveLength(12);
     expect(() => createRoamWorld({ seed: 1, map: mapDef, players: 13 })).toThrow('3〜12');
     const { w, nibblers, artisans } = stage();
@@ -119,15 +121,15 @@ describe('人数と役職', () => {
   });
 });
 
-/** 妖精びいきの試合（2026-11-18 から既定では入れないので、指定して入れる。狐は入れない）。 */
+/** 妖精マニアの試合（2026-11-18 から既定では入れないので、指定して入れる。狐は入れない）。 */
 const FAN = { madmen: 1, foxes: 0 } as const;
 
-describe('妖精びいき', () => {
+describe('妖精マニア', () => {
   it('指定した時だけ入る。誰も知らず、誰からも知られない。特別な行動は無く、従業員と同じものが見える', () => {
     expect(createRoamWorld({ seed: 1, map: mapDef, players: 11 }).truth.madmanIds).toHaveLength(0);
     expect(createRoamWorld({ seed: 1, map: mapDef, players: 11, roam: { madmen: 0 } }).truth.madmanIds).toHaveLength(0);
     expect(createRoamWorld({ seed: 1, map: mapDef, players: 8, roam: { madmen: 1 } }).truth.madmanIds).toHaveLength(1);
-    // 妖精びいきを入れても、妖精の顔ぶれは変わらない
+    // 妖精マニアを入れても、妖精の顔ぶれは変わらない
     expect(createRoamWorld({ seed: 5, map: mapDef, players: 11, roam: FAN }).truth.nibblerIds).toEqual(createRoamWorld({ seed: 5, map: mapDef, players: 11 }).truth.nibblerIds);
     const { w, nibblers, madmen, artisans } = stage(1, FAN);
     expect(madmen).toHaveLength(1);
@@ -141,13 +143,13 @@ describe('妖精びいき', () => {
     expect(fanObs.napCooldown).toBeNull();
     for (const id of nibblers) expect(buildRoamObservation(w, id).self.allies).not.toContain(name(w, fan));
     // 顔ぶれの人数は全員が知っている（誰がどれかは入らない）
-    for (const id of [fan, artisans[0], nibblers[0]]) expect(buildRoamObservation(w, id).cast).toEqual({ total: 11, nibblers: 2, madmen: 1, foxes: 0 });
+    for (const id of [fan, artisans[0], nibblers[0]]) expect(buildRoamObservation(w, id).cast).toEqual({ total: 11, nibblers: 2, madmen: 1, foxes: 0, seers: 0 });
     for (const action of ['transform', 'transform_if_unseen', 'sneak', 'sabotage']) {
       expect(violation(() => applyRoamIntent(w, fan, { action, target: name(w, artisans[0]) })).code).toBe('unknown_action');
     }
   });
 
-  it('仕込みはふりだけで進み具合に数えない。妖精は妖精びいきも餅に変えられ、餅になっても心だけの仕込みは無い', () => {
+  it('仕込みはふりだけで進み具合に数えない。妖精は妖精マニアも餅に変えられ、餅になっても心だけの仕込みは無い', () => {
     const { w, nibblers, madmen, artisans } = stage(1, FAN);
     const fan = madmen[0] as PlayerId;
     const steps = artisans.reduce((sum, id) => sum + actorById(w, id).duties.reduce((n, duty) => n + duty.steps.length, 0), 0);
@@ -166,7 +168,7 @@ describe('妖精びいき', () => {
     expect(actorById(w, fan).spirit).toBeNull();
   });
 
-  it('クビになった時に知らされるのは、妖精だったかどうかだけ（従業員と妖精びいきで同じ文になる）', () => {
+  it('クビになった時に知らされるのは、妖精だったかどうかだけ（従業員と妖精マニアで同じ文になる）', () => {
     const historyAfterEjecting = (pickTarget: (s: ReturnType<typeof stage>) => PlayerId) => {
       const s = stage(1, FAN);
       const target = pickTarget(s);
@@ -183,19 +185,19 @@ describe('妖精びいき', () => {
     expect(fan.line).toContain('〇〇 をクビにした（妖精ではなかった）');
     expect(fan.line).toBe(plain.line);
     expect(fairy.line).toContain('〇〇 をクビにした（妖精だった）');
-    expect(fan.line).not.toMatch(/妖精びいき|従業員/);
+    expect(fan.line).not.toMatch(/妖精マニア|従業員/);
   });
 
-  it('頭数は人間の側に数える。起きている人間（従業員と妖精びいき）が妖精の人数以下で、妖精と妖精びいきの勝ち', () => {
+  it('頭数は人間の側に数える。起きている人間（従業員と妖精マニア）が妖精の人数以下で、妖精と妖精マニアの勝ち', () => {
     const { w, nibblers, madmen, artisans } = stage(1, FAN);
-    // 起きているのを、妖精2人・妖精びいき1人・従業員2人にする
+    // 起きているのを、妖精2人・妖精マニア1人・従業員2人にする
     for (const id of artisans.slice(2)) playerById(w, id).status = 'asleep';
     for (const id of artisans.slice(2)) actorById(w, id).onMap = false;
     place(w, nibblers[0], 5, 30);
     place(w, artisans[0], 5, 31);
     applyRoamIntent(w, nibblers[0], { action: 'transform', target: name(w, artisans[0]) });
     run(w, 0.4);
-    // 人間は 従業員1・妖精びいき1 の2人 = 妖精2人
+    // 人間は 従業員1・妖精マニア1 の2人 = 妖精2人
     expect(w.result).toEqual({ winner: 'nibbler', why: 'outnumbered' });
     expect(madmen.every((id) => playerById(w, id).status === 'awake')).toBe(true);
   });
@@ -219,14 +221,15 @@ describe('狐', () => {
     expect(obs.hatches).toBeNull();
     expect(obs.napCooldown).toBeNull();
     for (const id of nibblers) expect(buildRoamObservation(w, id).self.allies).not.toContain(name(w, fox));
-    for (const id of [fox, artisans[0], nibblers[0]]) expect(buildRoamObservation(w, id).cast).toEqual({ total: 11, nibblers: 2, madmen: 0, foxes: 1 });
-    for (const action of ['transform', 'transform_if_unseen', 'sneak', 'sabotage']) {
+    // 狐の横取りの条件（仕込みの工程の数）も、全員が知っている決まり（2026-11-21 から）
+    for (const id of [fox, artisans[0], nibblers[0]]) expect(buildRoamObservation(w, id).cast).toEqual({ total: 11, nibblers: 2, madmen: 0, foxes: 1, seers: 0, foxSteps: 7 });
+    for (const action of ['transform', 'transform_if_unseen', 'sneak', 'sabotage', 'divine']) {
       expect(violation(() => applyRoamIntent(w, fox, { action, target: name(w, artisans[0]) })).code).toBe('unknown_action');
     }
   });
 
-  it('仕込みはふりだけ。妖精は狐も餅に変えられる', () => {
-    const { w, nibblers, foxes } = stage();
+  it('仕込みはふりだけ。狐には、妖精の手が効かない（2026-11-21 から）', () => {
+    const { w, nibblers, foxes, artisans } = stage();
     const fox = foxes[0] as PlayerId;
     applyRoamIntent(w, fox, { action: 'do_task', target: 'なし' });
     run(w, 60);
@@ -234,15 +237,30 @@ describe('狐', () => {
     expect(w.taskDone).toBe(0);
     place(w, nibblers[0], 5, 30);
     place(w, fox, 5, 31);
+    // そばで見ている従業員
+    place(w, artisans[0], 6, 30);
+    applyRoamIntent(w, artisans[0], { action: 'wait', target: 'なし' });
     applyRoamIntent(w, nibblers[0], { action: 'transform', target: name(w, fox) });
-    run(w, 0.4);
-    expect(playerById(w, fox).status).toBe('asleep');
+    // 見聞きしたことは、その刻みのあいだだけ残るので、手をかざした刻みで止める
+    for (let i = 0; i < 20 && !w.happenings.some((h) => h.type === 'nap_failed'); i++) stepRoam(w);
+    expect(playerById(w, fox).status).toBe('awake');
+    expect(w.incidents).toHaveLength(0);
+    expect(w.happenings.find((h) => h.type === 'nap_failed')).toMatchObject({ id: nibblers[0], targetId: fox });
+    // 妖精の力は使ったことになる（次に使えるまで待つ）
+    expect(w.napReadyAt[nibblers[0]]).toBeGreaterThan(w.clock);
+    // 手をかざした妖精には、相手が狐だと分かる。狐は、手をかざされたことに気づかない（何も伝わらない）。そばで見ていた人にも、何も伝わらない
+    expect(actorById(w, nibblers[0]).lastResult).toContain(`${name(w, fox)} は狐だ`);
+    expect(actorById(w, nibblers[0]).lastResult).toContain(`${name(w, fox)} は、手をかざされたことに気づいていない`);
+    expect(actorById(w, fox).events.join('\n')).not.toContain('手をかざ');
+    expect(actorById(w, fox).events.join('\n')).not.toContain('妖精だ');
+    expect(actorById(w, artisans[0]).events.join('\n')).not.toContain('手をかざ');
+    expect(w.happenings.find((h) => h.type === 'nap_failed')).toMatchObject({ witnesses: [] });
   });
 
-  it('起きたまま試合が終われば、どちらが勝っても狐が横取りする。餅になっていれば横取りしない', () => {
+  it('条件の無い試合（foxSteps 0）: 起きたまま試合が終われば、どちらが勝っても狐が横取りする。餅になっていれば横取りしない', () => {
     // 妖精が勝つはずの終わり方（起きている人間が妖精の人数以下）
     const fairyWin = (foxAsleep: boolean) => {
-      const { w, nibblers, foxes, artisans } = stage();
+      const { w, nibblers, foxes, artisans } = stage(1, { foxSteps: 0 });
       const fox = foxes[0] as PlayerId;
       for (const id of artisans.slice(1)) {
         playerById(w, id).status = 'asleep';
@@ -261,25 +279,77 @@ describe('狐', () => {
     expect(fairyWin(false)).toEqual({ winner: 'fox', why: 'outnumbered', stolenFrom: 'nibbler' });
     expect(fairyWin(true)).toEqual({ winner: 'nibbler', why: 'outnumbered' });
     // 従業員が勝つはずの終わり方（仕込みがぜんぶ終わる）
-    const { w } = stage();
+    const { w } = stage(1, { foxSteps: 0 });
     w.taskDone = w.taskTotal;
     run(w, 1);
     expect(w.result).toEqual({ winner: 'fox', why: 'tasks_done', stolenFrom: 'artisan' });
   });
 
-  it('クビになった狐は、全員には「妖精ではなかった」と出る', () => {
+  it('条件のある試合（既定: 7工程）: 狐は、自分の仕込みを7工程終えて起きていれば横取りする。足りなければ横取りできない（2026-11-21 から）', () => {
+    const end = (stepsDone: number) => {
+      const { w, foxes } = stage();
+      const fox = foxes[0] as PlayerId;
+      // 狐の仕込みを、決めた数だけ終えたことにする（従業員の進み具合には入らない）
+      let left = stepsDone;
+      for (const duty of actorById(w, fox).duties) for (const step of duty.steps) if (left > 0) { step.done = true; left--; }
+      w.taskDone = w.taskTotal;
+      run(w, 1);
+      return w.result;
+    };
+    expect(end(6)).toEqual({ winner: 'artisan', why: 'tasks_done', foxMissed: { done: 6, need: 7 } });
+    expect(end(7)).toEqual({ winner: 'fox', why: 'tasks_done', stolenFrom: 'artisan' });
+  });
+
+  it('狐の仕込みは、狐の横取りの条件のぶんだけ進む。従業員の進み具合は増えない。進みは本人にだけ見える', () => {
+    const { w, foxes, artisans } = stage();
+    const fox = foxes[0] as PlayerId;
+    // 始めは 0工程。狐の観測にだけ入る（集会でも見回りでも）
+    expect(buildRoamObservation(w, fox).self.foxWork).toEqual({ done: 0, need: 7 });
+    expect(buildRoamObservation(w, artisans[0]).self.foxWork).toBeUndefined();
+    const before = w.taskDone;
+    applyRoamIntent(w, fox, { action: 'do_task', target: 'なし' });
+    run(w, 60);
+    const steps = w.happenings.filter((h) => h.type === 'task' && h.id === fox);
+    expect(steps.length).toBeGreaterThan(0);
+    // 狐の手順は、従業員の進み具合を増やさない（pretend のまま）。記録に、狐自身の進みが残る
+    expect(steps.every((h) => h.type === 'task' && h.pretend && h.fox !== undefined)).toBe(true);
+    expect(w.taskDone).toBe(before);
+    const mine = buildRoamObservation(w, fox).self.foxWork;
+    expect(mine).toEqual({ done: steps.length, need: 7 });
+    const last = steps.at(-1);
+    expect(last?.type === 'task' && last.fox).toEqual(mine);
+    for (const id of [artisans[0], artisans[1]]) expect(JSON.stringify(buildRoamObservation(w, id))).not.toContain('foxWork');
+  });
+
+  it('クビになった狐は、全員に「狐だった」と知らされる（2026-11-21 から）', () => {
     const s = stage();
     const fox = s.foxes[0] as PlayerId;
+    expect(buildRoamObservation(s.w, s.artisans[0]).foxesOut).toBeUndefined();
     applyRoamIntent(s.w, s.artisans[0], { action: 'call_meeting', target: 'なし' });
     run(s.w, 120);
     expect(s.w.stage).toBe('meeting');
     hold(s.w, (voter) => (voter === fox ? 'skip' : fox));
-    expect(s.w.history[0]).toContain(`${nameOf(s.w, fox)} をクビにした（妖精ではなかった）`);
-    expect(s.w.history[0]).not.toMatch(/狐/);
+    expect(s.w.history[0]).toContain(`${nameOf(s.w, fox)} をクビにした（狐だった）`);
+    // クビで狐と分かった人数は、全員の観測に入る（公開の情報）
+    expect(buildRoamObservation(s.w, s.artisans[0]).foxesOut).toBe(1);
+    expect(buildRoamObservation(s.w, s.nibblers[0]).foxesOut).toBe(1);
   });
 });
 
 describe('仕込み', () => {
+  it('同じ仕込みが、なるべく人と重ならないように配られる。枠が小さくても、全員に同じものは配らない（2026-11-21 夜から）', () => {
+    for (const dutySteps of [14, 7]) {
+      for (const seed of [78, 79, 80]) {
+        const w = createRoamWorld({ seed, map: mapDef, players: 11, roam: { foxes: 1, seers: 1, madmen: 1, dutySteps } });
+        const holders = new Map<string, number>();
+        for (const actor of w.actors) for (const duty of actor.duties) holders.set(duty.name, (holders.get(duty.name) ?? 0) + 1);
+        const counts = [...holders.values()];
+        // 前の配り方では、14工程で10人が同じ仕込みを持つことがあり、7工程では11人全員が「ベルトコンベアーの修理」を持っていた
+        expect(Math.max(...counts), `${dutySteps}工程 種${seed}`).toBeLessThanOrEqual(dutySteps === 14 ? 8 : 6);
+      }
+    }
+  });
+
   it('全員が同じ形の仕込みを持ち、進み具合に数えるのは従業員の分だけ', () => {
     const { w, artisans } = stage();
     // 1人に14工程。ずんだ餅づくり・機械の修理・開店の支度を 5:3:2 で（7・4・3）。全員共通の仕込みは無い
@@ -300,6 +370,7 @@ describe('仕込み', () => {
     giveCard(w, worker);
     place(w, worker, 5, 38);
     place(w, watcher, 8, 38);
+    const shownBefore = buildRoamObservation(w, worker).duties?.length ?? 0;
     applyRoamIntent(w, worker, { action: 'do_task', target: '出勤カードを切る' });
     run(w, 2);
     // 帳場の出勤カードの前で、手を動かしている。そばの人には、それが見える
@@ -312,7 +383,10 @@ describe('仕込み', () => {
     applyRoamIntent(w, worker, { action: 'do_task', target: 'なし' });
     run(w, 3 * w.roam.dutyPace - 4);
     expect(w.taskDone).toBe(1);
-    expect(buildRoamObservation(w, worker).duties?.find((duty) => duty.name === '出勤カードを切る')?.steps[0]).toMatchObject({ done: true });
+    // 終わった仕込みは一覧から消え、まだ出ていない仕込みが1つ出る（2026-11-21 夜から、見えるのは3つまで）
+    const after = buildRoamObservation(w, worker);
+    expect(after.duties?.some((duty) => duty.name === '出勤カードを切る')).toBe(false);
+    expect(after.duties).toHaveLength(shownBefore);
     expect(w.happenings.at(-1)).toMatchObject({ type: 'task', id: worker, what: '出勤カードを切る', pretend: false, spirit: false, done: 1 });
     // 終わったら、止められるまで次の仕込みへ進む
     // （次の持ち場が同じ部屋なら、もう手を動かしている）
@@ -471,7 +545,7 @@ describe('妨害', () => {
     const { w, nibblers, artisans } = stage();
     const [a, b] = artisans;
     applyRoamIntent(w, nibblers[0], { action: 'sabotage', target: 'かまど' });
-    expect(buildRoamObservation(w, a).events[0]).toContain('かまどが焚かれすぎている！ 45秒のうちに、蒸し場 の「かまどの火」と中庭 の「井戸の水」に、同時に人がつかないといけない');
+    expect(buildRoamObservation(w, a).events[0]).toContain('かまどが焚かれすぎている！ 45秒のうちに、蒸し場 の「かまどの火」と氷室 の「氷室の氷」に、同時に人がつかないといけない');
     place(w, a, 48, 6);
     applyRoamIntent(w, a, { action: 'fix', target: 'かまどの火' });
     run(w, 10);
@@ -479,13 +553,13 @@ describe('妨害', () => {
     expect(buildRoamObservation(w, b).trouble).toMatchObject({
       kind: 'crisis',
       secondsLeft: 35,
-      fixAt: [{ name: 'かまどの火', room: '蒸し場', held: true }, { name: '井戸の水', room: '中庭', held: false }],
+      fixAt: [{ name: 'かまどの火', room: '蒸し場', held: true }, { name: '氷室の氷', room: '氷室', held: false }],
     });
     // 場所を言わなければ、まだ誰もついていない方へ向かう
     place(w, b, 44, 6);
     applyRoamIntent(w, b, { action: 'fix', target: 'なし' });
-    expect(buildRoamObservation(w, b).activity).toBe('中庭 の「井戸の水」へ、直しに向かっている');
-    place(w, b, 35, 27);
+    expect(buildRoamObservation(w, b).activity).toBe('氷室 の「氷室の氷」へ、直しに向かっている');
+    place(w, b, 6, 34);
     run(w, 2);
     expect(w.trouble).toBeNull();
     expect(w.stage).toBe('roam');
@@ -507,7 +581,7 @@ describe('妨害', () => {
     expect(buildRoamObservation(w, b).activity).toBe('蒸し場 の「かまどの火」へ、直しに向かっている');
     run(w, 2);
     expect(buildRoamObservation(w, a).activity).toContain('「かまどの火」についている');
-    expect(buildRoamObservation(w, b).activity).toBe('中庭 の「井戸の水」へ、直しに向かっている');
+    expect(buildRoamObservation(w, b).activity).toBe('氷室 の「氷室の氷」へ、直しに向かっている');
     // 場所を名指しした人は、人がついていても、そこへ行く
     place(w, c, 46, 8);
     applyRoamIntent(w, c, { action: 'fix', target: 'かまどの火' });
@@ -538,6 +612,10 @@ describe('妨害', () => {
     applyRoamIntent(saved.w, saved.nibblers[0], { action: 'transform', target: name(saved.w, victim) });
     run(saved.w, 0.4);
     applyRoamIntent(saved.w, finder, { action: 'report', target: name(saved.w, victim) });
+    // 餅のすぐそばまで歩いてから知らせる（2026-11-22 から）
+    expect(saved.w.stage).toBe('roam');
+    run(saved.w, 2);
+    expect(saved.w.stage).toBe('meeting');
     expect(saved.w.trouble).toBeNull();
     hold(saved.w);
     run(saved.w, 50);
@@ -596,7 +674,7 @@ describe('床下の抜け道', () => {
     expect(buildRoamObservation(w, sneaker).hatches).toContainEqual({ group: '西', rooms: ['倉庫', '氷室', '帳場'] });
     expect(violation(() => applyRoamIntent(w, sneaker, { action: 'sneak', target: '中庭' })).code).toBe('no_hatch');
     applyRoamIntent(w, sneaker, { action: 'sneak', target: '氷室' });
-    expect(buildRoamObservation(w, sneaker).activity).toBe('倉庫 の抜け道の出入口へ向かっている');
+    expect(buildRoamObservation(w, sneaker).activity).toBe('倉庫 の抜け道へ向かっている');
     run(w, 1);
     expect(actorById(w, sneaker).under).toBe(true);
     expect(actorMark(w, actorById(w, sneaker))).toBe('u');
@@ -662,7 +740,7 @@ describe('非干渉（広い工房）', () => {
             // 手を付けていない仕込みを、別の人のものと入れ替える（進み具合の数は変えない）
             actor.duties = actor.duties.map((duty) => (duty.steps.some((step) => step.done) ? duty : { ...duty, name: `${duty.name}${salt}` }));
           }
-          // 見えない2人のあいだで、役職を入れ替える（妖精と従業員、妖精びいきと従業員。顔ぶれの人数は変えない）
+          // 見えない2人のあいだで、役職を入れ替える（妖精と従業員、妖精マニアと従業員。顔ぶれの人数は変えない）
           const artisansHidden = hidden.filter((id) => playerById(changed, id).role === 'artisan');
           const from = hidden.find((id) => actorById(changed, id).nibbler);
           const to = artisansHidden[0];
@@ -694,7 +772,222 @@ describe('非干渉（広い工房）', () => {
     applyRoamIntent(w, nibblers[0], { action: 'sabotage', target: 'かまど' });
     for (const id of [nibblers[0], artisans[0]]) {
       const text = JSON.stringify(buildRoamObservation(w, id));
-      expect(text).not.toMatch(/"x":|"y":|"pos"|"id"|h-souko|wellwater|"p\d+"/);
+      expect(text).not.toMatch(/"x":|"y":|"pos"|"id"|h-souko|iceblock|"p\d+"/);
     }
+  });
+});
+
+describe('占い師', () => {
+  const SEER = { seers: 1 } as const;
+
+  it('指定した時だけ、従業員の中から1人。ほかの役の割り当ては変わらない。本人だけが占える', () => {
+    expect(createRoamWorld({ seed: 1, map: mapDef, players: 11 }).truth.seerIds).toHaveLength(0);
+    for (const seed of [1, 5, 9]) {
+      const plain = createRoamWorld({ seed, map: mapDef, players: 11 });
+      const withSeer = createRoamWorld({ seed, map: mapDef, players: 11, roam: SEER });
+      expect(withSeer.truth.nibblerIds).toEqual(plain.truth.nibblerIds);
+      expect(withSeer.truth.foxIds).toEqual(plain.truth.foxIds);
+      expect(withSeer.roster).toEqual(plain.roster);
+    }
+    const { w, nibblers, foxes, seers, artisans } = stage(1, SEER);
+    expect(seers).toHaveLength(1);
+    const seer = seers[0] as PlayerId;
+    expect(playerById(w, seer).role).toBe('seer');
+    expect([...nibblers, ...foxes]).not.toContain(seer);
+    for (const id of [seer, artisans[0], nibblers[0]]) expect(buildRoamObservation(w, id).cast).toEqual({ total: 11, nibblers: 2, madmen: 0, foxes: 1, seers: 1, foxSteps: 7, divineSeconds: 10 });
+    // 占えるのは本人だけ。ほかの人の観測には、占いのことは何も入らない
+    const mine = buildRoamObservation(w, seer);
+    expect(mine.divine).toEqual({ usesLeft: 1 });
+    expect(mine.self.divined).toEqual([]);
+    expect(roamActions(mine)).toContain('divine');
+    expect(mine.self.allies).toEqual([]);
+    expect(mine.napCooldown).toBeNull();
+    for (const id of [artisans[0], nibblers[0], foxes[0] as PlayerId]) {
+      const obs = buildRoamObservation(w, id);
+      expect(obs.divine).toBeUndefined();
+      expect(obs.self.divined).toBeUndefined();
+      expect(roamActions(obs)).not.toContain('divine');
+      expect(violation(() => applyRoamIntent(w, id, { action: 'divine', target: name(w, seer) })).code).toBe('unknown_action');
+    }
+    // 占い師は、妖精だけの行動はできない
+    for (const action of ['transform', 'transform_if_unseen', 'sneak', 'sabotage']) {
+      expect(violation(() => applyRoamIntent(w, seer, { action, target: name(w, artisans[0]) })).code).toBe('unknown_action');
+    }
+  });
+
+  it('従業員と同じに、仕込みが進む', () => {
+    const { w, seers } = stage(1, { ...SEER, foxes: 0 });
+    const seer = seers[0] as PlayerId;
+    applyRoamIntent(w, seer, { action: 'do_task', target: 'なし' });
+    run(w, 60);
+    const steps = w.happenings.filter((h) => h.type === 'task' && h.id === seer);
+    expect(steps.length).toBeGreaterThan(0);
+    expect(steps.every((h) => h.type === 'task' && !h.pretend)).toBe(true);
+    expect(w.taskDone).toBe(steps.length);
+  });
+
+  it('そばまで歩いて占うと、妖精かどうかが本人にだけ分かる。1試合に1回だけ。相手にも周りにも分からない', () => {
+    const { w, nibblers, seers, artisans } = stage(1, SEER);
+    const seer = seers[0] as PlayerId;
+    const [fairy] = nibblers;
+    const watcher = artisans[0];
+    place(w, seer, 5, 30);
+    place(w, fairy, 9, 30);
+    place(w, watcher, 6, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, fairy) });
+    expect(buildRoamObservation(w, seer).activity).toBe(`${name(w, fairy)} に近づいて、占おうとしている（そばに${w.roam.divineSeconds}秒いると占える）`);
+    run(w, 0.2);
+    // まだ届かない
+    expect(playerById(w, seer).divined).toEqual([]);
+    run(w, 3);
+    // そばに着いても、決まりの秒数そばにいるまでは占えない（2026-11-21 夜から 10秒）
+    expect(playerById(w, seer).divined).toEqual([]);
+    expect(buildRoamObservation(w, seer).activity).toMatch(new RegExp(`^${name(w, fairy)} のそばで、占っている（あと\\d+秒。離れると、はじめから）$`));
+    run(w, w.roam.divineSeconds);
+    expect(playerById(w, seer).divined).toEqual([{ name: name(w, fairy), round: 1, fairy: true }]);
+    const mine = buildRoamObservation(w, seer);
+    expect(mine.lastResult).toBe(`${name(w, fairy)} を占った: 妖精だった`);
+    expect(mine.divine).toEqual({ usesLeft: 0 });
+    expect(mine.self.divined).toEqual([{ name: name(w, fairy), round: 1, fairy: true }]);
+    expect(roamActions(mine)).not.toContain('divine');
+    // 占われた妖精は起きたまま。妖精にも、そばで見ていた人にも、何も伝わらない
+    expect(playerById(w, fairy).status).toBe('awake');
+    const divine = w.happenings.find((h) => h.type === 'divine');
+    expect(divine).toMatchObject({ id: seer, targetId: fairy, fairy: true, cursed: false, witnesses: [] });
+    for (const id of [fairy, watcher]) {
+      const obs = buildRoamObservation(w, id);
+      expect(JSON.stringify(obs)).not.toContain('占');
+    }
+    expect(w.incidents).toHaveLength(0);
+    // 1回占ったら、もう占えない
+    expect(violation(() => applyRoamIntent(w, seer, { action: 'divine', target: name(w, watcher) })).code).toBe('divined');
+  });
+
+  it('従業員を占うと「妖精ではなかった」。占えるのは見回り1回につき1人で、次の見回りでまた1人占える', () => {
+    const { w, seers, artisans } = stage(1, SEER);
+    const seer = seers[0] as PlayerId;
+    const [first, second] = artisans;
+    place(w, seer, 5, 30);
+    place(w, first, 5, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, first) });
+    run(w, w.roam.divineSeconds + 0.4);
+    expect(buildRoamObservation(w, seer).lastResult).toBe(`${name(w, first)} を占った: 妖精ではなかった`);
+    // 同じ見回りでは、もう占えない
+    expect(buildRoamObservation(w, seer).divine).toEqual({ usesLeft: 0 });
+    place(w, second, 6, 30);
+    expect(violation(() => applyRoamIntent(w, seer, { action: 'divine', target: name(w, second) })).code).toBe('divined');
+    // 集会の観測にも、本人にだけ結果が入る
+    applyRoamIntent(w, second, { action: 'call_meeting', target: 'なし' });
+    run(w, 120);
+    expect(w.stage).toBe('meeting');
+    expect(buildObservation(w, seer).self.divined).toEqual([{ name: name(w, first), round: 1, fairy: false }]);
+    expect(buildObservation(w, first).self.divined).toBeUndefined();
+    expect(JSON.stringify(buildObservation(w, first))).not.toContain('占');
+    hold(w);
+    expect(w.stage).toBe('roam');
+    // 次の見回りでは、また1人占える
+    const next = buildRoamObservation(w, seer);
+    expect(next.divine).toEqual({ usesLeft: 1 });
+    expect(roamActions(next)).toContain('divine');
+    place(w, seer, 5, 30);
+    place(w, second, 5, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, second) });
+    run(w, w.roam.divineSeconds + 0.4);
+    expect(playerById(w, seer).divined).toEqual([
+      { name: name(w, first), round: 1, fairy: false },
+      { name: name(w, second), round: 2, fairy: false },
+    ]);
+    expect(buildRoamObservation(w, seer).divine).toEqual({ usesLeft: 0 });
+    // 集会の経過（全員に公開）には、占いのことは出ない
+    expect(w.history.join('')).not.toContain('占');
+  });
+
+  it('占われた狐は、その場でずんだ餅に変わる。見ていた人には、誰も手をかざしていないのに変わった、とだけ伝わる', () => {
+    const { w, foxes, seers, artisans } = stage(1, SEER);
+    const seer = seers[0] as PlayerId;
+    const fox = foxes[0] as PlayerId;
+    const watcher = artisans[0];
+    place(w, seer, 5, 30);
+    place(w, fox, 5, 31);
+    place(w, watcher, 6, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, fox) });
+    run(w, w.roam.divineSeconds + 0.2);
+    expect(playerById(w, fox).status).toBe('asleep');
+    expect(actorById(w, fox).spirit).toBeNull();
+    expect(playerById(w, seer).divined).toEqual([{ name: name(w, fox), round: 1, fairy: false, cursed: true }]);
+    expect(buildRoamObservation(w, seer).lastResult).toBe(`${name(w, fox)} を占った: 妖精ではなかった。${name(w, fox)} は、その場でずんだ餅に変わった（狐だった）`);
+    const seen = buildRoamObservation(w, watcher);
+    expect(seen.events).toEqual([`${areaAt(w.map, actorById(w, fox).pos)} で ${name(w, fox)} が急にずんだ餅に変わるのを見た（見えた範囲では、誰も手をかざしていなかった）`]);
+    expect(JSON.stringify(seen)).not.toContain('占');
+    expect(w.happenings.find((h) => h.type === 'divine')).toMatchObject({ id: seer, targetId: fox, fairy: false, cursed: true, witnesses: [{ id: watcher }] });
+    // 妖精が餅に変えた記録には入らない
+    expect(w.incidents).toHaveLength(0);
+    // 餅になった狐は、勝ちを横取りしない
+    w.taskDone = w.taskTotal;
+    run(w, 0.2);
+    expect(w.result).toEqual({ winner: 'artisan', why: 'tasks_done' });
+  });
+
+  it('占われた狐が餅になって、起きている人間が妖精の人数以下になれば、妖精の勝ち', () => {
+    const { w, nibblers, foxes, seers, artisans } = stage(1, SEER);
+    const seer = seers[0] as PlayerId;
+    const fox = foxes[0] as PlayerId;
+    // 起きているのは、妖精2人・占い師・狐・従業員1人（人間3人）
+    for (const id of artisans.slice(1)) {
+      playerById(w, id).status = 'asleep';
+      actorById(w, id).onMap = false;
+    }
+    expect(nibblers).toHaveLength(2);
+    place(w, seer, 5, 30);
+    place(w, fox, 5, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, fox) });
+    run(w, w.roam.divineSeconds + 0.2);
+    expect(w.result).toEqual({ winner: 'nibbler', why: 'outnumbered' });
+  });
+
+  it('占うには、相手のそばに決まりの秒数いつづける。途中で離れたら、はじめから（2026-11-21 夜から）', () => {
+    const { w, seers, artisans } = stage(1, SEER);
+    const seer = seers[0] as PlayerId;
+    const target = artisans[0];
+    place(w, seer, 5, 30);
+    place(w, target, 5, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, target) });
+    run(w, w.roam.divineSeconds - 2);
+    expect(playerById(w, seer).divined).toEqual([]);
+    // 相手が離れた（占い師の手の届かない所へ）。はじめから数え直す
+    place(w, target, 5, 36);
+    run(w, 0.4);
+    place(w, target, 5, 31);
+    run(w, w.roam.divineSeconds - 2);
+    expect(playerById(w, seer).divined).toEqual([]);
+    run(w, 2.4);
+    expect(playerById(w, seer).divined).toEqual([{ name: name(w, target), round: 1, fairy: false }]);
+  });
+
+  it('占っている途中で、同じ相手への占いをもう一度頼んでも、数え直しにならない', () => {
+    // 判断のたびに同じ占いを選び直すと、頼み直すたびにはじめからになり、10秒のはずが 40秒あまりかかったことがあった
+    const { w, seers, artisans } = stage(1, SEER);
+    const seer = seers[0] as PlayerId;
+    const target = artisans[0];
+    place(w, seer, 5, 30);
+    place(w, target, 5, 31);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, target) });
+    run(w, 4);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, target) });
+    run(w, 4);
+    applyRoamIntent(w, seer, { action: 'divine', target: name(w, target) });
+    expect(playerById(w, seer).divined).toEqual([]);
+    run(w, w.roam.divineSeconds - 8 + 0.4);
+    expect(playerById(w, seer).divined).toEqual([{ name: name(w, target), round: 1, fairy: false }]);
+  });
+
+  it('クビになった占い師は、全員には「妖精ではなかった」とだけ出る', () => {
+    const s = stage(1, SEER);
+    const seer = s.seers[0] as PlayerId;
+    applyRoamIntent(s.w, s.artisans[0], { action: 'call_meeting', target: 'なし' });
+    run(s.w, 120);
+    hold(s.w, (voter) => (voter === seer ? 'skip' : seer));
+    expect(s.w.history[0]).toContain(`${nameOf(s.w, seer)} をクビにした（妖精ではなかった）`);
+    expect(s.w.history[0]).not.toMatch(/占/);
   });
 });

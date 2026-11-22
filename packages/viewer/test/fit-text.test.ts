@@ -50,7 +50,7 @@ describe('文字を枠に収める', () => {
   });
 
   it('集会の内心は、160字あっても切らない（実戦の最長は156字）', () => {
-    const thought = '見たのは、2:08にこはくが洗い場から蒸し場へ入ったところ。'.repeat(6).slice(0, 160);
+    const thought = '見たのは、2:08にあさぎが洗い場から蒸し場へ入ったところ。'.repeat(6).slice(0, 160);
     const fit = fitText(ctx, thought, THOUGHT_FRAMES);
     expect(fit.cut).toBe(false);
     expect(fit.rows.join('')).toBe(thought);

@@ -90,6 +90,34 @@ export function patientBrains<T extends Brain | null>(
 }
 
 /**
+ * 返事が遅い時に知らせる（待つのはやめない）。
+ * → 返事を待つ時間に上限を付けない。CLI が固まった時に気づけるよう、長く待っている間は一定の間隔で知らせるだけにする。
+ */
+export function watchedBrains<T extends Brain | null>(brains: readonly T[], options: { everySeconds?: number; onSlow: (brainId: string, seconds: number) => void }): T[] {
+  const every = (options.everySeconds ?? 300) * 1000;
+  const wrapped = new Map<Brain, Brain>();
+  return brains.map((brain) => {
+    if (brain === null) return brain;
+    const known = wrapped.get(brain);
+    if (known) return known as T;
+    const watched: Brain = {
+      id: brain.id,
+      decide: async (request) => {
+        const started = Date.now();
+        const timer = setInterval(() => options.onSlow(brain.id, Math.round((Date.now() - started) / 1000)), every);
+        try {
+          return await brain.decide(request);
+        } finally {
+          clearInterval(timer);
+        }
+      },
+    };
+    wrapped.set(brain, watched);
+    return watched as T;
+  });
+}
+
+/**
  * 頭脳の呼び出しに、試合全体での上限を付ける（利用枠を使いすぎないための歯止め）。
  * 上限は全部の頭脳で共有する。台本ボット（null）は数えない。
  */

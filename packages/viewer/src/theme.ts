@@ -20,24 +20,29 @@ export const ZUNDA_DARK = '#5f8f2c';
 export const MOCHI = '#fffaf0';
 export const NIGHT = '#1d2440';
 /** 役職の呼び名（内部の名前 nibbler は、前の題材のなごり）。 */
-export const ROLE_LABEL: Record<Role, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', madman: '妖精びいき', fox: '狐' };
+export const ROLE_LABEL: Record<Role, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', madman: '妖精マニア', fox: '狐', seer: '占い師' };
 /** 狭い所に出す時の呼び名。 */
-export const ROLE_SHORT: Record<Role, string> = { artisan: '従業員', nibbler: '妖精', madman: '妖精びいき', fox: '狐' };
-export const ROLE_COLOR: Record<Role, string> = { artisan: '#4f8a3a', nibbler: '#c0392b', madman: '#7d3c98', fox: '#d9771f' };
+export const ROLE_SHORT: Record<Role, string> = { artisan: '従業員', nibbler: '妖精', madman: '妖精マニア', fox: '狐', seer: '占い師' };
+export const ROLE_COLOR: Record<Role, string> = { artisan: '#4f8a3a', nibbler: '#c0392b', madman: '#7d3c98', fox: '#d9771f', seer: '#6741d9' };
 /** 役職を見せている時の、名札の地の色（従業員は名札の色をそのまま使う）。 */
-export const ROLE_TAG: Record<Role, string | null> = { artisan: null, nibbler: 'rgba(160, 30, 22, 0.9)', madman: 'rgba(98, 40, 120, 0.9)', fox: 'rgba(196, 98, 14, 0.92)' };
-/** 勝ち負けの側。妖精びいきは、妖精が勝てば勝ち。狐はひとりだけの側。 */
+export const ROLE_TAG: Record<Role, string | null> = { artisan: null, nibbler: 'rgba(160, 30, 22, 0.9)', madman: 'rgba(98, 40, 120, 0.9)', fox: 'rgba(196, 98, 14, 0.92)', seer: 'rgba(95, 61, 196, 0.92)' };
+/** 勝ち負けの側。妖精マニアは、妖精が勝てば勝ち。狐はひとりだけの側。 */
 export type SideName = 'artisan' | 'nibbler' | 'fox';
-export const SIDE_OF: Record<Role, SideName> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox' };
-/** クビになった人について、全員に知らされること（妖精だったかどうかだけ）。 */
-export function ejectVerdict(role: Role): { text: string; fairy: boolean } {
-  return role === 'nibbler' ? { text: '妖精だった', fairy: true } : { text: '妖精ではなかった', fairy: false };
+export const SIDE_OF: Record<Role, SideName> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' };
+/** 従業員の側ではない役（妖精・妖精マニア・狐）。仕込みはふりだけ。占い師は従業員の側で、仕込みも本物。 */
+export const isOutsider = (role: Role): boolean => SIDE_OF[role] !== 'artisan';
+/** 役職の小さな札に書く、短い呼び名（従業員には札を付けない）。 */
+export const ROLE_CHIP: Record<Role, string> = { artisan: '', nibbler: '妖精', madman: 'マニア', fox: '狐', seer: '占い師' };
+/** クビになった人について、全員に知らされること（妖精だったかどうか。狐は「狐だった」。2026-11-21 から）。 */
+export function ejectVerdict(role: Role): { text: string; fairy: boolean; fox: boolean } {
+  return role === 'nibbler' ? { text: '妖精だった', fairy: true, fox: false } : role === 'fox' ? { text: '狐だった', fairy: false, fox: true } : { text: '妖精ではなかった', fairy: false, fox: false };
 }
 
 /** 観戦者にだけ見せる、本当の役職の一言（全員に知らされたことと同じなら null）。 */
 export function ejectTruth(role: Role, withMadman: boolean): string | null {
-  if (role === 'madman') return `本当は ${ROLE_LABEL.madman}`;
-  if (role === 'fox') return `本当は ${ROLE_LABEL.fox}`;
+  if (role === 'madman') return `本当は${ROLE_LABEL.madman}`;
+  // 狐は、全員に「狐だった」と知らされる（2026-11-21 から）
+  if (role === 'seer') return `本当は${ROLE_LABEL.seer}`;
   if (role === 'artisan' && withMadman) return `${ROLE_LABEL.artisan}だった`;
   return null;
 }

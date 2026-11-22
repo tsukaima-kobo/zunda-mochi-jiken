@@ -124,6 +124,8 @@ export function checkRoamIntent(obs: RoamObservation, json: unknown, denyList: r
   else if (action === 'sneak') fits = (obs.hatches ?? []).some((group) => group.rooms.includes(target));
   else if (action === 'check') fits = (obs.devices ?? []).some((device) => device.name === target);
   else if (action === 'sabotage') fits = target === SABOTAGE_LIGHTS || target === SABOTAGE_CRISIS || (obs.sabotage?.doorRooms.includes(target) ?? false);
+  // 占いは、まだ占っていない相手だけ（同じ相手を占い直しても、結果は同じ）
+  else if (action === 'divine') fits = awake.includes(target) && !(obs.self.divined ?? []).some((d) => d.name === target);
   else fits = awake.includes(target);
   // どの行動の target が合わなかったかを残す（聞き直しの文を、本人が選んだ行動の分だけにするため）
   const problems = [...privateDataProblems(intent.thought, denyList), ...privateDataProblems(intent.say, denyList), ...(fits ? [] : ['target', `target:${action}`])];
@@ -150,9 +152,12 @@ export function roamFeedbackFor(problems: readonly string[], obs: RoamObservatio
     else if (wrong === 'do_task') parts.push('自分の仕込みは、もう残っていません。ほかの行動を選んでください。');
     else if (wrong === 'fix') parts.push('いま、直すものはありません。ほかの行動を選んでください。');
     else if (wrong === 'check') parts.push(`check の target は、道具の名前にしてください: ${(obs.devices ?? []).map((d) => d.name).join(' / ')}`);
-    else if (wrong === 'sneak') parts.push(`sneak の target は、抜け道の出入口のある部屋にしてください: ${(obs.hatches ?? []).flatMap((group) => group.rooms).join(' / ')}`);
+    else if (wrong === 'sneak') parts.push(`sneak の target は、抜け道のある部屋にしてください: ${(obs.hatches ?? []).flatMap((group) => group.rooms).join(' / ')}`);
     else if (wrong === 'sabotage') parts.push(`sabotage の target は「${SABOTAGE_LIGHTS}」「${SABOTAGE_CRISIS}」か、戸を閉められる部屋の名前にしてください: ${(obs.sabotage?.doorRooms ?? []).join(' / ')}`);
-    else parts.push(`${wrong} の target は、いま見えている起きている相手にしてください（${list(awake, 'いまは誰も見えていない')}）。`);
+    else if (wrong === 'divine') {
+      const done = new Set((obs.self.divined ?? []).map((d) => d.name));
+      parts.push(`divine の target は、まだ占っていない、いま見えている起きている相手にしてください（${list(awake.filter((name) => !done.has(name)), 'いまは、占える相手が見えていない。ほかの行動を選んでください')}）。`);
+    } else parts.push(`${wrong} の target は、いま見えている起きている相手にしてください（${list(awake, 'いまは誰も見えていない')}）。`);
   }
   if (problems.some((p) => p.startsWith('private:'))) {
     parts.push('ゲームの外のこと（メールアドレス、フォルダ名、機械の名前など）には触れないでください。');
