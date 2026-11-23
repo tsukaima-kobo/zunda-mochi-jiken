@@ -162,7 +162,7 @@ describe('広い工房・11人の試合', () => {
       // 勝敗の理由が、記録と合っている
       const awake = log.players.filter((p) => !asleep.has(p.name) && !home.has(p.name));
       const awakeNibblers = awake.filter((p) => p.role === 'nibbler').length;
-      // 妖精マニアと狐は人間の側に数える。狐が、自分の仕込みを決まった数だけ終えて起きたまま終われば、勝ちは狐（理由は、本来の終わり方のまま）。
+      // 妖精マニアと狐は人間側に数える。狐が、自分の仕込みを決まった数だけ終えて起きたまま終われば、勝ちは狐（理由は、本来の終わり方のまま）。
       // 起きていても仕込みが足りなければ、横取りできない（foxMissed。2026-11-21 から）
       const foxAwake = awake.find((p) => p.role === 'fox');
       const foxDone = foxAwake ? log.events.filter((e) => e.type === 'task' && e.agent === foxAwake.name).length : 0;

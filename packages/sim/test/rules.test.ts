@@ -188,7 +188,7 @@ describe('妖精マニア', () => {
     expect(fan.line).not.toMatch(/妖精マニア|従業員/);
   });
 
-  it('頭数は人間の側に数える。起きている人間（従業員と妖精マニア）が妖精の人数以下で、妖精と妖精マニアの勝ち', () => {
+  it('頭数は人間側に数える。起きている人間（従業員と妖精マニア）が妖精の人数以下で、妖精と妖精マニアの勝ち', () => {
     const { w, nibblers, madmen, artisans } = stage(1, FAN);
     // 起きているのを、妖精2人・妖精マニア1人・従業員2人にする
     for (const id of artisans.slice(2)) playerById(w, id).status = 'asleep';

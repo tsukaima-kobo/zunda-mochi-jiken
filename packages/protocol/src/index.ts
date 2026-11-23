@@ -12,7 +12,7 @@ import type { BondView } from './cast.ts';
  * 狐（fox）は、人狼の妖狐にあたる、ひとりだけの陣営。試合が終わった時に起きていて、自分の仕込みを決まった数（foxSteps）だけ終えていれば、どちらが勝っても勝ちを横取りする
  * （2026-11-21 に、仕込みの条件を足した。狐の仕込みは、従業員の進み具合には入らない）。
  * 狐も妖精に餅にされる（本家の妖狐のように噛まれない、ということはない）。占い師に占われると、その場でずんだ餅になる。
- * 占い師（seer）は、従業員の側の人間。自分の仕込みをしながら、見回り1回につき1人、そばにいる相手を占える（2026-11-21 昼に1試合に1回へ変え、同じ日の夕方に見回りごとへ戻した）。
+ * 占い師（seer）は、従業員側の人間。自分の仕込みをしながら、見回り1回につき1人、そばにいる相手を占える（2026-11-21 昼に1試合に1回へ変え、同じ日の夕方に見回りごとへ戻した）。
  * 分かるのは、その相手が妖精かどうかだけ（狐も妖精マニアも「妖精ではない」と出る）。占ったことは、周りからは分からない。
  */
 export type Role = 'artisan' | 'nibbler' | 'madman' | 'fox' | 'seer';
@@ -25,7 +25,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   seer: '占い師',
 };
 
-/** 勝ち負けの側。妖精マニアは妖精の側（妖精が勝てば勝ち）。狐はひとりだけの側。占い師は従業員の側。 */
+/** 勝ち負けの側。妖精マニアは妖精側（妖精が勝てば勝ち）。狐はひとりだけの陣営。占い師は従業員側。 */
 export type Side = 'artisan' | 'nibbler' | 'fox';
 export const SIDE_OF: Record<Role, Side> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' };
 export const SIDE_LABEL: Record<Side, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', fox: '狐' };

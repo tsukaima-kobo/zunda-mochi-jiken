@@ -26,10 +26,10 @@ export const ROLE_SHORT: Record<Role, string> = { artisan: '従業員', nibbler:
 export const ROLE_COLOR: Record<Role, string> = { artisan: '#4f8a3a', nibbler: '#c0392b', madman: '#7d3c98', fox: '#d9771f', seer: '#6741d9' };
 /** 役職を見せている時の、名札の地の色（従業員は名札の色をそのまま使う）。 */
 export const ROLE_TAG: Record<Role, string | null> = { artisan: null, nibbler: 'rgba(160, 30, 22, 0.9)', madman: 'rgba(98, 40, 120, 0.9)', fox: 'rgba(196, 98, 14, 0.92)', seer: 'rgba(95, 61, 196, 0.92)' };
-/** 勝ち負けの側。妖精マニアは、妖精が勝てば勝ち。狐はひとりだけの側。 */
+/** 勝ち負けの側。妖精マニアは、妖精が勝てば勝ち。狐はひとりだけの陣営。 */
 export type SideName = 'artisan' | 'nibbler' | 'fox';
 export const SIDE_OF: Record<Role, SideName> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' };
-/** 従業員の側ではない役（妖精・妖精マニア・狐）。仕込みはふりだけ。占い師は従業員の側で、仕込みも本物。 */
+/** 従業員側ではない役（妖精・妖精マニア・狐）。仕込みはふりだけ。占い師は従業員側で、仕込みも本物。 */
 export const isOutsider = (role: Role): boolean => SIDE_OF[role] !== 'artisan';
 /** 役職の小さな札に書く、短い呼び名（従業員には札を付けない）。 */
 export const ROLE_CHIP: Record<Role, string> = { artisan: '', nibbler: '妖精', madman: 'マニア', fox: '狐', seer: '占い師' };

@@ -2481,7 +2481,7 @@ export class Stage {
         alpha = 1 - easeInOut(k);
         dy = easeInOut(k) * 20;
       } else if (decided && segment.result) {
-        // 従業員の側から見て、よい結果か（妖精をクビにした）
+        // 従業員側から見て、よい結果か（妖精をクビにした）
         const good = segment.result.ejectedRole === 'nibbler';
         if (options.secrets) mood = SIDE_OF[member.role] === 'nibbler' ? (good ? 'worried' : ejected ? 'sly' : 'happy') : good ? 'happy' : ejected ? 'worried' : 'normal';
       }
