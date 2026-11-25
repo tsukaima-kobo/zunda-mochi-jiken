@@ -36,8 +36,8 @@ export type RoamEvent =
   | { type: 'chat'; t: number; speaker: string; say: string; heard: string[]; keep?: number; mute?: boolean }
   /** 人がずんだ餅に変えられた（type の名前は前の題材のなごり）。witnesses の sawWho が false の人は、餅に変わるところだけを見た。 */
   | { type: 'nap'; t: number; by: string; target: string; room: string; witnesses: { name: string; sawWho: boolean; camera?: string }[] }
-  /** 仕込みの手順が1つ終わった。pretend はふりだけ（進み具合は増えない。妖精と妖精マニア）。spirit は、ずんだ餅になった従業員が心だけで進めた分。 */
-  /** fox: 狐の分だけ。狐自身の仕込みの進み（横取りの条件。2026-11-21 から）。 */
+  /** 仕込みの手順が1つ終わった。pretend はふりだけ（進み具合は増えない。人狼と狂信者）。spirit は、ずんだ餅になった従業員が心だけで進めた分。 */
+  /** fox: 妖狐の分だけ。妖狐自身の仕込みの進み（横取りの条件。2026-11-21 から）。 */
   | { type: 'task'; t: number; agent: string; duty: string; what: string; station: string; pretend: boolean; spirit: boolean; done: number; total: number; fox?: { done: number; need: number } }
   /** 妨害。what が door のとき room はその部屋、seconds は閉まっている秒数。crisis の seconds は猶予。 */
   | { type: 'sabotage'; t: number; by: string; what: 'lights' | 'crisis' | 'door'; room: string | null; seconds: number | null }
@@ -47,14 +47,14 @@ export type RoamEvent =
   | { type: 'sneak'; t: number; by: string; phase: 'in' | 'out'; room: string; hatch: string; witnesses: string[] }
   | { type: 'bell'; t: number; by: string }
   /**
-   * 占い師が占った。fairy: 妖精だった。cursed: 占われた狐が、その場でずんだ餅に変わった（witnesses は、餅に変わるところを見た人）。
+   * 占い師が占った。fairy: 人狼だった。cursed: 占われた妖狐が、その場でずんだ餅に変わった（witnesses は、餅に変わるところを見た人）。
    * 結果を知っているのは占い師だけ（観戦者とログのための記録）。
    */
   | { type: 'divine'; t: number; by: string; target: string; room: string; fairy: boolean; cursed: boolean; witnesses: { name: string; camera?: string }[] }
-  /** 妖精が狐に手をかざしたが、狐はずんだ餅にならなかった（2026-11-21 から）。 */
+  /** 人狼が妖狐に杖をふったが、妖狐はずんだ餅にならなかった（2026-11-21 から）。 */
   | { type: 'nap_failed'; t: number; by: string; target: string; room: string; witnesses: { name: string; camera?: string }[] }
   /**
-   * 工房の道具を見た（見取り図の盤・名札かけ・防犯カメラの画面）。start は見始め、end は見終わり（aborted は途中でやめた）。
+   * 工房の道具を見た（シフト表・ずんだ餅ボード・防犯カメラの画面）。start は見始め、end は見終わり（aborted は途中でやめた）。
    * end には、見えたもの: counts は部屋ごとの人数、tags は全員の名札、seen はカメラごとに映った人（防犯カメラは、途中でやめても入る）。
    */
   | {
@@ -137,7 +137,7 @@ export interface MatchLog {
    * 歩き回りの記録（mode が match のとき）。r は何回目の見回りか、pos は名簿順に [x0, y0, x1, y1, …]、
    * st は名簿順の1文字ずつ（a: 起きている / w: 持ち場で手を動かしている / u: 床下の抜け道の中 / z: ずんだ餅になっている / x: 工房にいない）。
    * gp は、心だけになって仕込みを続けている人の位置（名簿順に [x0, y0, …]。いない人は -1）。誰もいなければ省く。
-   * taskTotal は、始まった時の、従業員の仕込みの手順の数。steps は、名簿順の、1人ずつの手順の数（妖精と妖精マニアの分は見せかけ）。
+   * taskTotal は、始まった時の、従業員の仕込みの手順の数。steps は、名簿順の、1人ずつの手順の数（人狼と狂信者の分は見せかけ）。
    */
   roam?: { config: RoamConfig; map: MapDefinition; taskTotal: number; steps: number[]; frames: { r: number; t: number; pos: number[]; st: string; gp?: number[] }[] };
 }
@@ -264,7 +264,8 @@ export async function conductMeeting(world: MeetingWorld, match: Match, firstTur
     applySpeak(world, speakerId, result.intent.say); // ルールは進行役の側でもう一度確かめる
     match.applied(turn, speakerId, result);
     const { say, thought, suspect } = result.intent;
-    match.record({ type: 'speak', meeting: meeting.index, round, speaker: name, say: say.trim(), thought, suspect, source: result.source, brain: agent.brainId, latencyMs: latencyOf(result) });
+    // 黙った番（say が空）は、発言の記録に残さない（上映にも出ない）。黙ったことは journal の apply に残る
+    if (say.trim().length > 0) match.record({ type: 'speak', meeting: meeting.index, round, speaker: name, say: say.trim(), thought, suspect, source: result.source, brain: agent.brainId, latencyMs: latencyOf(result) });
     turn += 1;
   }
 
@@ -337,17 +338,17 @@ export function describeMeeting(result: MeetingResult): string {
 }
 
 export const WHY_LABEL: Record<GameResult['why'], string> = {
-  nibbler_sent_home: 'ずんだの妖精を全員クビにした',
+  nibbler_sent_home: '人狼を全員クビにした',
   tasks_done: '従業員の仕込みがぜんぶ終わった',
   opened: '開店の時刻まで工房を守りきった',
-  outnumbered: '起きている人間が、ずんだの妖精の人数以下になった',
+  outnumbered: '起きている人間が、人狼の人数以下になった',
   crisis: 'かまどの焚きすぎを直せなかった',
   late: '開店の時刻までに仕込みが終わらなかった',
 };
 
 export function describeOutcome(log: MatchLog): string {
-  const win = (side: Side) => `${SIDE_LABEL[side]}の勝ち${side === 'nibbler' && log.truth.madman ? '（妖精マニアも勝ち）' : ''}`;
-  if (log.result?.stolenFrom) return `${WHY_LABEL[log.result.why]} → ${SIDE_LABEL[log.result.stolenFrom]}の勝ち…のはずが、狐が起きていたので狐の勝ち`;
+  const win = (side: Side) => `${SIDE_LABEL[side]}の勝ち${side === 'nibbler' && log.truth.madman ? '（狂信者も勝ち）' : ''}`;
+  if (log.result?.stolenFrom) return `${WHY_LABEL[log.result.why]} → ${SIDE_LABEL[log.result.stolenFrom]}の勝ち…のはずが、妖狐が起きていたので妖狐の勝ち`;
   if (log.result) return `${WHY_LABEL[log.result.why]} → ${win(log.result.winner)}`;
   if (!log.outcome) return '途中で止まりました（利用枠切れ）。';
   return `${describeMeeting(log.outcome)} → ${win(log.outcome.winner)}`;

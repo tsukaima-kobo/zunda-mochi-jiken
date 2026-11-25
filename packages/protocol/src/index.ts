@@ -6,29 +6,29 @@ import { z } from 'zod';
 import type { BondView } from './cast.ts';
 
 /**
- * 従業員 / ずんだの妖精 / 妖精マニア / 狐 / 占い師。
+ * 従業員 / 人狼 / 狂信者 / 妖狐 / 占い師。
  * 内部の名前 nibbler は、前の題材（つまみ食い犯）のなごり。記録の互換のために残している。
- * 妖精マニア（madman）は、人狼の狂人にあたる人間。妖精の味方だが、誰が妖精かは知らない（2026-11-18 から既定では入れない）。
- * 狐（fox）は、人狼の妖狐にあたる、ひとりだけの陣営。試合が終わった時に起きていて、自分の仕込みを決まった数（foxSteps）だけ終えていれば、どちらが勝っても勝ちを横取りする
- * （2026-11-21 に、仕込みの条件を足した。狐の仕込みは、従業員の進み具合には入らない）。
- * 狐も妖精に餅にされる（本家の妖狐のように噛まれない、ということはない）。占い師に占われると、その場でずんだ餅になる。
+ * 狂信者（madman）は、人狼の味方をする人間。誰が人狼かを知っている（人狼は、誰が狂信者かを知らない）。
+ * 妖狐（fox）は、ひとりだけの陣営。試合が終わった時に起きていれば、どちらが勝っても勝ちを横取りする
+ * （自分の仕込みを決まった数（foxSteps）だけ終えていること、という条件を足すこともできる。既定は条件なし。条件がある時も、妖狐の仕込みは従業員の進み具合には入らない）。
+ * 妖狐には人狼の杖が効かない。占い師に占われると、その場でずんだ餅になる。
  * 占い師（seer）は、従業員側の人間。自分の仕込みをしながら、見回り1回につき1人、そばにいる相手を占える（2026-11-21 昼に1試合に1回へ変え、同じ日の夕方に見回りごとへ戻した）。
- * 分かるのは、その相手が妖精かどうかだけ（狐も妖精マニアも「妖精ではない」と出る）。占ったことは、周りからは分からない。
+ * 分かるのは、その相手が人狼かどうかだけ（妖狐も狂信者も「人狼ではない」と出る）。占ったことは、周りからは分からない。
  */
 export type Role = 'artisan' | 'nibbler' | 'madman' | 'fox' | 'seer';
 
 export const ROLE_LABEL: Record<Role, string> = {
   artisan: '従業員',
-  nibbler: 'ずんだの妖精',
-  madman: '妖精マニア',
-  fox: '狐',
+  nibbler: '人狼',
+  madman: '狂信者',
+  fox: '妖狐',
   seer: '占い師',
 };
 
-/** 勝ち負けの側。妖精マニアは妖精側（妖精が勝てば勝ち）。狐はひとりだけの陣営。占い師は従業員側。 */
+/** 勝ち負けの側。狂信者は人狼側（人狼が勝てば勝ち）。妖狐はひとりだけの陣営。占い師は従業員側。 */
 export type Side = 'artisan' | 'nibbler' | 'fox';
 export const SIDE_OF: Record<Role, Side> = { artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' };
-export const SIDE_LABEL: Record<Side, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', fox: '狐' };
+export const SIDE_LABEL: Record<Side, string> = { artisan: '従業員', nibbler: '人狼', fox: '妖狐' };
 
 /** この試合の顔ぶれ（役職ごとの人数。誰がどれかは入らない）。全員が知っている。古い記録には foxes・seers が無い。 */
 export interface CastCounts {
@@ -37,19 +37,26 @@ export interface CastCounts {
   madmen: number;
   foxes?: number;
   seers?: number;
-  /** 狐が横取りするために終えておく、自分の仕込みの工程の数（全員が知っている決まり）。条件の無い試合と古い記録には無い。 */
+  /** 妖狐が横取りするために終えておく、自分の仕込みの工程の数（全員が知っている決まり）。条件の無い試合と古い記録には無い。 */
   foxSteps?: number;
   /** 占い師が占うのに、相手のそばにいつづける秒数（全員が知っている決まり。2026-11-21 夜から）。占い師のいない試合と古い記録には無い。 */
   divineSeconds?: number;
 }
 
-/** 占い師が占った結果（本人にだけ渡す）。fairy: 妖精だった。cursed: 占った相手が、その場でずんだ餅に変わった（狐だった）。 */
+/** 占い師が占った結果（本人にだけ渡す）。fairy: 人狼だった。cursed: 占った相手が、その場でずんだ餅に変わった（妖狐だった）。 */
 export interface Divined {
   name: string;
   /** 何回目の見回りで占ったか。 */
   round: number;
   fairy: boolean;
   cursed?: boolean;
+  /**
+   * そばにいはじめた時刻と、占いが終わった時刻（試合の開始からの秒）と、終わった時の場所。占い師本人が見て知っていること。
+   * 集会で「いつ・どこで占ったか」を正しく言えるように渡す（2026-11-22。本物の占い師が、自分の言った時刻や場所の食い違いでクビになっていた）。
+   */
+  from?: number;
+  to?: number;
+  room?: string;
 }
 
 /** 会議で全員に聞こえた発言。話者は表示名で表す（内部の通し番号は観測に出さない）。 */
@@ -83,18 +90,18 @@ export interface MeetingObservation {
     persona: string;
     /** 遊び方の癖（本人の分だけ）。 */
     style: string;
-    /** 同じ陣営だと本人が知っている相手（妖精どうしだけ。妖精マニアは誰も知らない）。 */
+    /** 同じ陣営だと本人が知っている相手（人狼には仲間の人狼。狂信者には人狼。人狼は、誰が狂信者かを知らない）。 */
     allies: string[];
     /** 本人から見た、ほかの人との間柄（親密度）。この試合に出ている人の分だけ。 */
     bonds?: BondView[];
     /** 占い師だけ: これまでに占った結果（古い順）。ほかの人には無い。 */
     divined?: Divined[];
-    /** 狐だけ（横取りに仕込みの条件がある試合）: 自分の仕込みの進み（done 工程 / 要るのは need 工程）。ほかの人には無い。 */
+    /** 妖狐だけ（横取りに仕込みの条件がある試合）: 自分の仕込みの進み（done 工程 / 要るのは need 工程）。ほかの人には無い。 */
     foxWork?: { done: number; need: number };
   };
   /** 本人がこの回に見聞きしたこと（時刻つきの短文）。 */
   facts: string[];
-  /** クビになって「狐だった」と全員に知らされた狐の人数（狐のいる試合で、1人以上の時だけ。2026-11-21 から）。 */
+  /** クビになって「妖狐だった」と全員に知らされた妖狐の人数（妖狐のいる試合で、1人以上の時だけ。2026-11-21 から）。 */
   foxesOut?: number;
   /** これまでの集会の経過（全員に公開された内容だけ）。古い順。 */
   history: string[];
@@ -112,10 +119,25 @@ export interface MeetingObservation {
   /** この試合の顔ぶれ（役職ごとの人数。誰がどれかは入らない）。全員が知っている。 */
   cast?: CastCounts | null;
   /**
-   * いまの局面（全員に公開された情報だけで分かること）。awake は出席者の数、fairiesLeft は顔ぶれの妖精の数から
-   * 「妖精だった」と公表された人を引いた数。lastChance は、ここで誰もクビにならないと、次に1人が餅になった時点で妖精の勝ちになる局面。
+   * いまの局面（全員に公開された情報だけで分かること）。awake は出席者の数、fairiesLeft は顔ぶれの人狼の数から
+   * 「人狼だった」と公表された人を引いた数。lastChance は、ここで誰もクビにならないと、次に1人が餅になった時点で、従業員が勝てなくなる局面（2026-11-24 から、まだ起きているかもしれない妖狐も、クビにしないといけない相手として数える。foxUp: 妖狐が、まだ起きているかもしれない）。
    */
-  stakes?: { awake: number; fairiesLeft: number; lastChance: boolean } | null;
+  stakes?: {
+    awake: number;
+    fairiesLeft: number;
+    lastChance: boolean;
+    /** 妖狐が、まだ起きているかもしれない（顔ぶれの妖狐の数から、「妖狐だった」と公表された人を引くと1以上）。 */
+    foxUp?: boolean;
+    /**
+     * ここでスキップすると、完全な情報があっても、もう勝てない人数（見回りで1人しか餅にならない、従業員に最も有利な場合でも）。lastChance より厳しい（人狼が2人の間は、lastChance のほうが1人多く出る）。
+     * ガードが、従業員のスキップを聞き直す時に使う（誤って止めないため、確実な場合だけ）。
+     */
+    skipFatal?: boolean;
+  } | null;
+  /**
+   * 集会の発言の番で、話すことがなければ黙ってよいか（say を空にできる）。集会の最初の発言は黙れない。
+   */
+  mayPass?: boolean;
   /** speak: 疑い先の候補。vote: 投票先の候補。どちらも本人以外の出席者＋棄権の語。朝礼・日記・感想会は「なし」だけ。 */
   options: string[];
   /** 試合が終わったあと（diary / review）だけ: 結果と、全員の役職。試合の間は入らない。 */
@@ -142,14 +164,17 @@ export const SKIP_VOTE = 'スキップ';
 export const SpeakIntent = z.object({
   /** 観戦者にだけ見せる内心。他のエージェントには渡さない。 */
   thought: z.string(),
-  /** 全員に聞こえる発言。 */
-  say: z.string().trim().min(1),
+  /**
+   * 全員に聞こえる発言。集会の発言の番で、観測の mayPass が true の時だけ、空（黙っている）にできる。
+   * 空を受け付けるかは、進行役（guard と sim の applySpeak）が確かめる。
+   */
+  say: z.string().trim(),
   /** いま最も疑っている相手。非公開（観戦者と本人の記憶だけ）。 */
   suspect: z.string(),
 });
 export type SpeakIntent = z.infer<typeof SpeakIntent>;
 
-/** 疑い度（0: まったく疑っていない 〜 5: 妖精だと確信）。投票の時に、ほかの出席者の全員について答える。非公開（観戦者にだけ見せる）。 */
+/** 疑い度（0: まったく疑っていない 〜 5: 人狼だと確信）。投票の時に、ほかの出席者の全員について答える。非公開（観戦者にだけ見せる）。 */
 export const SUSPICION_LEVELS = [0, 1, 2, 3, 4, 5] as const;
 export const SuspicionEntry = z.object({ name: z.string(), level: z.number() });
 export type SuspicionEntry = z.infer<typeof SuspicionEntry>;
@@ -240,7 +265,7 @@ export const NO_TARGET = 'なし';
  */
 export interface RoamObservation {
   kind: 'roam';
-  /** foxWork: 狐だけ。横取りの条件の、自分の仕込みの進み（done 工程 / 要るのは need 工程）。条件の無い試合には無い。 */
+  /** foxWork: 妖狐だけ。横取りの条件の、自分の仕込みの進み（done 工程 / 要るのは need 工程）。条件の無い試合には無い。 */
   self: { name: string; role: Role; persona: string; style: string; allies: string[]; bonds?: BondView[]; divined?: Divined[]; foxWork?: { done: number; need: number } };
   /** 何回目の見回りか（集会のたびに1つ進む）。 */
   round: number;
@@ -252,7 +277,7 @@ export interface RoamObservation {
   where: string;
   /**
    * いま見えている相手。並びは名簿順（全員が知っている並び）。asleep はずんだ餅になっている。working は持ち場で手を動かしている。
-   * checking は、工房の道具（見取り図の盤など）を見ている時の、その道具の名前。
+   * checking は、工房の道具（シフト表など）を見ている時の、その道具の名前。
    */
   visible: { name: string; where: string; asleep: boolean; working?: boolean; checking?: string }[];
   /** 自分の仕込み（本人だけが知っている）。steps は回る順。 */
@@ -267,11 +292,11 @@ export interface RoamObservation {
   shutRooms?: string[];
   /** 中庭の鐘（みんなを集める）。usesLeft は自分があと何回鳴らせるか、waitSeconds は鳴らせるようになるまでの秒数。鐘の無いマップでは null。 */
   bell?: { usesLeft: number; waitSeconds: number } | null;
-  /** 妖精だけ: 妨害。waitSeconds は次に妨害できるまで、doorWaitSeconds は次に戸を閉められるまでの秒数。従業員は null。 */
+  /** 人狼だけ: 妨害。waitSeconds は次に妨害できるまで、doorWaitSeconds は次に戸を閉められるまでの秒数。従業員は null。 */
   sabotage?: { waitSeconds: number; doorWaitSeconds: number; doorRooms: string[] } | null;
-  /** 妖精だけ: 床下の抜け道。同じ組の部屋どうしがつながっている。従業員は null。 */
+  /** 人狼だけ: 床下の抜け道。同じ組の部屋どうしがつながっている。従業員は null。 */
   hatches?: { group: string; rooms: string[] }[] | null;
-  /** 工房の道具（誰でも見に行ける。全員が知っている）。kind: admin 見取り図の盤 / vitals 名札かけ / cameras 防犯カメラの画面。 */
+  /** 工房の道具（誰でも見に行ける。全員が知っている）。kind: admin シフト表 / vitals ずんだ餅ボード / cameras 防犯カメラの画面。 */
   devices?: RoamDevice[];
   /** 防犯カメラの画面を見ている間だけ: カメラごとに、いま映っている人。見ていなければ null。 */
   cameraView?: { place: string; seen: { name: string; asleep: boolean }[] }[] | null;
@@ -292,7 +317,7 @@ export interface RoamObservation {
   idle: boolean;
   /** 直前の行動の結果。まだ無ければ null。本人の行動だけから作った文。 */
   lastResult: string | null;
-  /** 妖精だけ: 次に人をずんだ餅に変えられるまでの秒数（0 なら変えられる）。ほかの人は null。 */
+  /** 人狼だけ: 次に人をずんだ餅に変えられるまでの秒数（0 なら変えられる）。ほかの人は null。 */
   napCooldown: number | null;
   /** 占い師だけ: 占い。usesLeft は、この見回りであと何回占えるか（見回り1回につき1人）。ほかの人は null か無い。 */
   divine?: { usesLeft: number } | null;
@@ -308,7 +333,7 @@ export interface RoamObservation {
   cast?: CastCounts | null;
   /** もう工房にいないと全員が知っている人（集会で分かったこと）。 */
   away: Absence[];
-  /** クビになって「狐だった」と全員に知らされた狐の人数（狐のいる試合で、1人以上の時だけ。2026-11-21 から）。 */
+  /** クビになって「妖狐だった」と全員に知らされた妖狐の人数（妖狐のいる試合で、1人以上の時だけ。2026-11-21 から）。 */
   foxesOut?: number;
   /** これまでの集会の経過（全員に公開された内容だけ）。古い順。 */
   history: string[];
@@ -347,12 +372,12 @@ export const SABOTAGE_CRISIS = 'かまど';
 /**
  * 誰でもできる行動。report は、見えている、ずんだ餅になった人を知らせて集会を開く。
  * do_task は自分の仕込みを進める。fix は困りごとを直しに行く。call_meeting は中庭の鐘を鳴らしに行く。
- * check は工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見に行く。
+ * check は工房の道具（シフト表・ずんだ餅ボード・防犯カメラの画面）を見に行く。
  */
 export const ROAM_ACTIONS = ['move_to', 'follow', 'wait', 'report', 'do_task', 'fix', 'call_meeting', 'check'] as const;
-/** 妖精だけができる行動。transform は人をずんだ餅に変える。transform_if_unseen は、ほかの誰にも見られていない時だけ変える。 */
+/** 人狼だけができる行動。transform は人をずんだ餅に変える。transform_if_unseen は、ほかの誰にも見られていない時だけ変える。 */
 export const NIBBLER_ACTIONS = ['transform', 'transform_if_unseen', 'sneak', 'sabotage'] as const;
-/** 占い師だけができる行動。divine は、見えている相手に近づいて占う（妖精かどうかが、本人にだけ分かる）。 */
+/** 占い師だけができる行動。divine は、見えている相手に近づいて占う（人狼かどうかが、本人にだけ分かる）。 */
 export const SEER_ACTIONS = ['divine'] as const;
 export const ALL_ROAM_ACTIONS = [...ROAM_ACTIONS, ...NIBBLER_ACTIONS, ...SEER_ACTIONS] as const;
 export type RoamAction = (typeof ALL_ROAM_ACTIONS)[number];

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyBallots, applySpeak, createWorld, currentSpeaker, priorityOrder, resolveBallots, RuleViolation } from '../src/index.ts';
+import { lastChanceOf } from '../src/observe.ts';
+import { applyBallots, applySpeak, buildObservation, createWorld, currentSpeaker, priorityOrder, resolveBallots, RuleViolation } from '../src/index.ts';
 
 const seats = ['a', 'b', 'c', 'd'];
 
@@ -102,5 +103,59 @@ describe('会議の前の状況', () => {
       expect(world.meeting.seats).not.toContain(victimId);
       expect(world.meeting.reporterId).not.toBe(nibblerId);
     }
+  });
+});
+
+describe('黙ってよい集会', () => {
+  it('最初の発言は黙れない。2人目からは、空の発言で黙れる（記録に残らず、次の人の番になる）', () => {
+    const world = createWorld({ seed: 3 });
+    const first = currentSpeaker(world) as string;
+    expect(() => applySpeak(world, first, '')).toThrow(/空/);
+    applySpeak(world, first, '見つけた時、そばには誰もいなかった。');
+    const second = currentSpeaker(world) as string;
+    expect(buildObservation(world, second).mayPass).toBe(true);
+    applySpeak(world, second, '  ');
+    expect(world.meeting.transcript).toHaveLength(1);
+    expect(currentSpeaker(world)).not.toBe(second);
+  });
+
+  it('全員が黙っても、巡は進み、投票になる', () => {
+    const world = createWorld({ seed: 5, config: { maxRounds: 2 } });
+    applySpeak(world, currentSpeaker(world) as string, '発言');
+    for (let id = currentSpeaker(world); id !== null; id = currentSpeaker(world)) applySpeak(world, id, '');
+    expect(world.meeting.phase).toBe('vote');
+    expect(world.meeting.transcript).toHaveLength(1);
+  });
+
+  it('黙れない設定（前の試合と同じ）では、空の発言を受け付けず、観測に mayPass が出ない', () => {
+    const world = createWorld({ seed: 3, config: { allowPass: false } });
+    applySpeak(world, currentSpeaker(world) as string, '発言');
+    const next = currentSpeaker(world) as string;
+    expect(buildObservation(world, next).mayPass).toBeUndefined();
+    expect(() => applySpeak(world, next, '')).toThrow(/空/);
+  });
+});
+
+// 人数の読みの本体は endgame.ts（試験は endgame.test.ts）。ここは、集会の観測に出る「最後の局面」の判定だけ。
+describe('最後の局面（ここで誰もクビにならないと、従業員が勝てなくなる）', () => {
+  it('妖狐がいなければ、人狼1人なら3人。人狼2人なら（見回りで2人が餅になることを見込んで）5〜6人', () => {
+    expect(lastChanceOf(3, 1, 0)).toBe(true);
+    expect(lastChanceOf(4, 1, 0)).toBe(false);
+    expect(lastChanceOf(5, 2, 0)).toBe(true);
+    expect(lastChanceOf(6, 2, 0)).toBe(true);
+    expect(lastChanceOf(7, 2, 0)).toBe(false);
+  });
+
+  it('妖狐がまだ起きているかもしれない時は、妖狐も数える（人狼1・妖狐1なら5人。4人以下は、もう勝てないので「最後」ではない）', () => {
+    expect(lastChanceOf(5, 1, 1)).toBe(true);
+    expect(lastChanceOf(6, 1, 1)).toBe(false);
+    expect(lastChanceOf(4, 1, 1)).toBe(false);
+    expect(lastChanceOf(7, 2, 1)).toBe(true);
+    expect(lastChanceOf(8, 2, 1)).toBe(true);
+    expect(lastChanceOf(9, 2, 1)).toBe(false);
+  });
+
+  it('人狼がもういなければ、最後の局面ではない', () => {
+    expect(lastChanceOf(3, 0, 1)).toBe(false);
   });
 });

@@ -42,7 +42,7 @@ describe('カメラの係（広いマップ）', () => {
     }
   });
 
-  it('ずんだ餅に変える場面は、変える妖精と変えられる人を、変える前から寄って映す', async () => {
+  it('ずんだ餅に変える場面は、変える人狼と変えられる人を、変える前から寄って映す', async () => {
     let naps = 0;
     for (const seed of [1, 3, 8, 21]) {
       const { show, director, roams, seatOf } = await stage(seed);

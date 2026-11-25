@@ -7,7 +7,7 @@ import type { MatchEvent } from '../../server/src/match-core.ts';
 import { centerOf, hasLineOfSight, parseMap } from '../../sim/src/index.ts';
 import type { GameMap } from '../../sim/src/index.ts';
 import { displayText, mouthAt, revealedChars } from '../../speech/src/index.ts';
-import { drawActor, drawPortrait, sparkle } from './actors.ts';
+import { drawActor, drawPortrait, sparkle, wandTip } from './actors.ts';
 import { drawCutin } from './cutin.ts';
 import { cameraMount, deviceSpot, drawCameraLamp, drawNameTags, drawScreensOn } from './devices.ts';
 import { drawBust, hasPortrait } from './portraits.ts';
@@ -234,22 +234,22 @@ const ACTION_LONG: Record<string, (target: string) => string> = {
   check: (target) => `${target}を見に行く`,
   divine: (target) => `${target}に近づいて、占う`,
 };
-/** 手をかざす動き: 餅に変える何秒前から手を上げはじめるか・下ろすのにかける秒数。 */
-const REACH_LEAD = 0.45;
+/** 杖をふる動き: 餅に変える何秒前から杖をふり上げはじめるか・下ろすのにかける秒数（2026-11-23 杖にした時に、ふり上げてふり下ろすのが見えるよう 0.45 → 0.8 秒）。 */
+const REACH_LEAD = 0.8;
 const REACH_DOWN = 0.35;
 
-/** ずんだの妖精だけが選べる行動（役職と内心を出さない時は、画面に出さない）。nap・nap_if_unseen は前の題材の記録。 */
+/** 人狼・占い師だけが選べる行動（役職と内心を出さない時は、画面に出さない）。nap・nap_if_unseen は前の題材の記録。 */
 const SECRET_ACTIONS = new Set(['transform', 'transform_if_unseen', 'nap', 'nap_if_unseen', 'sneak', 'sabotage', 'divine']);
 const VERDICT_TEXT: Record<string, string> = { tie: '票が割れた', too_few: '票が集まらなかった', skip_wins: 'スキップが多かった' };
 const COUNT_WORD = ['', 'ひとり', 'ふたり', '3人', '4人'];
-/** おしまいの理由。妖精の人数で言い方が変わるものがある。 */
+/** おしまいの理由。人狼の人数で言い方が変わるものがある。 */
 function whyText(why: string, nibblers: number): string {
   const many = nibblers > 1;
   switch (why) {
     case 'nibbler_sent_home':
-      return many ? 'ずんだの妖精を、全員クビにした' : 'ずんだの妖精を、クビにした';
+      return many ? '人狼を、全員クビにした' : '人狼を、クビにした';
     case 'outnumbered':
-      return many ? '起きている人間が、妖精と同じ人数まで減った' : '起きている人間が、ひとりだけになった';
+      return many ? '起きている人間が、人狼と同じ人数まで減った' : '起きている人間が、ひとりだけになった';
     case 'opened':
       return '開店の時刻まで、工房を守りきった';
     case 'tasks_done':
@@ -279,7 +279,7 @@ export class Stage {
   private readonly naps: Cue[] = [];
   /** 占い師が占った瞬間（上映の時刻の順）。 */
   private readonly divines: Cue[] = [];
-  /** 妖精が狐に手をかざしたが、餅にならなかった（2026-11-21 から）。 */
+  /** 人狼が妖狐に杖をふったが、餅にならなかった（2026-11-21 から）。 */
   private readonly misses: Cue[] = [];
   /** 餅に変わった時の、まわりの人の札（餅の合図ごとに1回だけ求める）。 */
   private readonly sightTags = new Map<Cue, { seat: number; kind: SightKind }[]>();
@@ -383,7 +383,7 @@ export class Stage {
         const who = event.by.join('と');
         this.headlines.push({ at: cue.at, text: event.what === 'lights' ? `${who}がブレーカーを上げて、あかりが戻った` : `${who}が、かまどを落ち着かせた！`, alert: false });
       } else if (event.type === 'sneak') {
-        // 仲間の妖精は、見ていても困らないので数えない
+        // 仲間の人狼は、見ていても困らないので数えない
         const eyes = event.witnesses.filter((name) => this.byName.get(name)?.role !== 'nibbler');
         const seen = eyes.length > 0 ? `　見ていた人: ${eyes.join('、')}` : '';
         this.headlines.push({ at: cue.at, text: event.phase === 'in' ? `${event.by}が、${event.room}の揚げ板から床下へもぐった${seen}` : `${event.by}が、${event.room}の揚げ板から出てきた${seen}`, alert: false, secretOnly: true });
@@ -406,32 +406,32 @@ export class Stage {
           alert: true,
         });
       } else if (event.type === 'nap_failed') {
-        // 狐には、妖精の手が効かない。誰が妖精で誰が狐かが分かる知らせなので、役職を見せている時だけ
+        // 妖狐には、人狼の杖が効かない。誰が人狼で誰が妖狐かが分かる知らせなので、役職を見せている時だけ
         this.misses.push(cue);
         const seen = event.witnesses.map((w) => w.name);
         this.headlines.push({
           at: cue.at,
-          text: `妖精の${event.by}が、狐の${event.target}に手をかざした！　でも、狐には効かない！　${seen.length > 0 ? `見ていた人: ${seen.join('、')}` : '誰も見ていない…'}`,
+          text: `人狼の${event.by}が、妖狐の${event.target}に杖をふった！　でも、妖狐には効かない！　${seen.length > 0 ? `見ていた人: ${seen.join('、')}` : '誰も見ていない…'}`,
           alert: true,
           secretOnly: true,
         });
       } else if (event.type === 'divine') {
         this.divines.push(cue);
         if (event.cursed) {
-          // 占われた狐は、その場で餅になる。役職を隠している時は、誰が占ったかを出さない
+          // 占われた妖狐は、その場で餅になる。役職を隠している時は、誰が占ったかを出さない
           this.statusChanges.push({ at: cue.at, name: event.target, status: 'z' });
           const seen = event.witnesses.map((w) => w.name);
           this.headlines.push({
             at: cue.at,
-            text: `占い師の${event.by}が占うと、狐の${event.target}が ずんだ餅に変わった！　${seen.length > 0 ? `見ていた人: ${seen.join('、')}` : '誰も見ていない…'}`,
+            text: `占い師の${event.by}が占うと、妖狐の${event.target}が ずんだ餅に変わった！　${seen.length > 0 ? `見ていた人: ${seen.join('、')}` : '誰も見ていない…'}`,
             plain: `${event.room}で${event.target}が、急に ずんだ餅になってしまった…`,
             alert: true,
           });
         } else {
-          this.headlines.push({ at: cue.at, text: `占い師の${event.by}が、${event.target}を占った！　結果: ${event.fairy ? '妖精だった！' : '妖精ではなかった'}`, alert: event.fairy, secretOnly: true });
+          this.headlines.push({ at: cue.at, text: `占い師の${event.by}が、${event.target}を占った！　結果: ${event.fairy ? '人狼だった！' : '人狼ではなかった'}`, alert: event.fairy, secretOnly: true });
         }
       } else if (event.type === 'round_start') {
-        const first = hasTasks ? '夜明け前の工房。ずんだの妖精に気をつけながら、仕込みを終えよう' : '夜明け前の工房。開店まで、ずんだの妖精から工房を守れるか？';
+        const first = hasTasks ? '夜明け前の工房。人狼に気をつけながら、仕込みを終えよう' : '夜明け前の工房。開店まで、人狼から工房を守れるか？';
         this.headlines.push({ at: cue.at, text: event.round === 1 ? first : `${event.round}回目の見回りが始まった`, alert: false });
       } else if (event.type === 'meeting_end') {
         if (event.ejected) this.statusChanges.push({ at: cue.at + 1.6, name: event.ejected, status: 'x' });
@@ -560,7 +560,7 @@ export class Stage {
     return status;
   }
 
-  /** その人が餅に変わった瞬間（妖精に変えられた時か、占われた狐）。 */
+  /** その人が餅に変わった瞬間（人狼に変えられた時か、占われた妖狐）。 */
   private fallOf(name: string): Cue | undefined {
     return this.naps.find((cue) => (cue.event as EventOf<'nap'>).target === name) ?? this.divines.find((cue) => (cue.event as EventOf<'divine'>).cursed && (cue.event as EventOf<'divine'>).target === name);
   }
@@ -581,15 +581,15 @@ export class Stage {
   // ───────── 見回り ─────────
 
   /**
-   * 仕込みが「ふり」の役か。妖精と妖精マニアは、いつも「ふり」。狐は、横取りに仕込みの条件の無い試合だけ「ふり」
-   * （条件のある試合では、狐の仕込みは自分の条件のぶんだけ進む。2026-11-21 から）。占い師の仕込みは本物。
+   * 仕込みが「ふり」の役か。人狼と狂信者は、いつも「ふり」。妖狐は、横取りに仕込みの条件の無い試合だけ「ふり」
+   * （条件のある試合では、妖狐の仕込みは自分の条件のぶんだけ進む。2026-11-21 から）。占い師の仕込みは本物。
    */
   private fakeWork(role: Role): boolean {
     if (role === 'fox') return (this.show.log.roam?.config.foxSteps ?? 0) === 0;
     return isOutsider(role);
   }
 
-  /** 行動の呼び名。妖精と妖精マニアの仕込みは「ふり」なので、役職を見せている時はそう書く。 */
+  /** 行動の呼び名。人狼と狂信者の仕込みは「ふり」なので、役職を見せている時はそう書く。 */
   private actionText(event: EventOf<'decide'>, long: boolean, secrets: boolean): string {
     const role = this.byName.get(event.agent)?.role;
     if (event.action === 'do_task' && secrets && role !== undefined && this.fakeWork(role)) {
@@ -765,7 +765,7 @@ export class Stage {
     }
     const napEvent = nap ? (nap.event as EventOf<'nap'>) : null;
     const napK = nap ? (poseTime - nap.at) / (nap.end - nap.at) : -1;
-    // 占いの瞬間（占った人・占われた人・結果）。占われた狐は、その場で餅になる
+    // 占いの瞬間（占った人・占われた人・結果）。占われた妖狐は、その場で餅になる
     let divined: Cue | null = null;
     for (const cue of this.divines) {
       if (poseTime < cue.at - 0.6 || poseTime > cue.end + 0.9 || !inSegment(cue)) continue;
@@ -806,7 +806,7 @@ export class Stage {
       }
     }
 
-    // 占われた人の足もとに、むらさきの輪（占ったことは、まわりの人には見えないので、役職を見せている時だけ。狐が餅になる時は、どちらでも出す）
+    // 占われた人の足もとに、むらさきの輪（占ったことは、まわりの人には見えないので、役職を見せている時だけ。妖狐が餅になる時は、どちらでも出す）
     if (divineEvent && divineK >= 0 && divineK <= 1.4 && (options.secrets || divineEvent.cursed)) {
       const target = poses[this.byName.get(divineEvent.target)?.seat ?? -1];
       if (target) {
@@ -911,7 +911,7 @@ export class Stage {
         if (napEvent.witnesses.some((w) => w.name === member.name)) mood = 'shock';
         if (napEvent.by === member.name) mood = 'sly';
       }
-      // 占われた狐が餅になるのを見た人は、おどろく
+      // 占われた妖狐が餅になるのを見た人は、おどろく
       if (divineEvent?.cursed && divineK >= 0 && divineK <= 1 && options.secrets && divineEvent.witnesses.some((w) => w.name === member.name)) mood = 'shock';
       const working = pose.state === 'w';
       const spot = working ? this.spotAt(pose.x, pose.y) : null;
@@ -919,15 +919,16 @@ export class Stage {
       const out = sneaks.find((span) => span.seat === member.seat && span.to !== null && poseTime >= span.end);
       const pop = out ? easeBack((poseTime - out.end) / 0.35) : 1;
       let facing: -1 | 1 = working ? (spot?.face ?? 1) : pose.dx < -0.001 ? -1 : 1;
-      // 手をかざす動き（役職を見せている時だけ）。餅に変える少し前から手を上げ、変わったあとに下ろす。狐に効かなかった時も、同じように上げる
-      let reach: { side: -1 | 1; k: number } | undefined;
+      // 杖をふる動き（役職を見せている時だけ）。餅に変える少し前から杖をふり上げてふり下ろし、変わったあとに下ろす。妖狐に効かなかった時も、同じようにふる
+      let reach: { side: -1 | 1; k: number; fall?: boolean } | undefined;
       if (options.secrets && isUp(pose)) {
         const aim = (targetName: string, local: number, hold: number) => {
           const target = poses[this.byName.get(targetName)?.seat ?? -1];
           if (!target || local < -REACH_LEAD || local > hold + REACH_DOWN) return;
-          const k = local < 0 ? easeOut((local + REACH_LEAD) / REACH_LEAD) : local <= hold ? 1 : 1 - clamp01((local - hold) / REACH_DOWN);
+          // ふり上げとふり下ろしが同じ速さで見えるよう、上げる間は時間どおりに進める（前は easeOut で、すぐ上がりきっていた）
+          const k = local < 0 ? clamp01((local + REACH_LEAD) / REACH_LEAD) : local <= hold ? 1 : 1 - clamp01((local - hold) / REACH_DOWN);
           const side: -1 | 1 = Math.abs(target.x - pose.x) < 0.05 ? facing : target.x < pose.x ? -1 : 1;
-          reach = { side, k };
+          reach = { side, k, fall: local > hold };
           facing = side;
         };
         if (nap && napEvent && napEvent.by === member.name) aim(napEvent.target, poseTime - nap.at, Math.min(0.7, (nap.end - nap.at) * 0.6));
@@ -942,7 +943,7 @@ export class Stage {
       const wings = options.secrets && member.role === 'nibbler';
       const tail = options.secrets && member.role === 'fox';
       const orb = options.secrets && member.role === 'seer';
-      // 変わったばかりの餅は、変えた妖精と重なっていても見えるよう、手前に描く
+      // 変わったばかりの餅は、変えた人狼と重なっていても見えるよう、手前に描く
       const fresh = fell !== undefined && poseTime - fell.at < 1.2;
       // 声を出している間は、口を動かす
       const chat = isUp(pose) ? this.activeChat(member.name, poseTime, segment) : null;
@@ -977,16 +978,22 @@ export class Stage {
     drawables.sort((a, b) => a.base - b.base);
     for (const item of drawables) item.draw();
 
-    // 妖精の手から飛ぶ、ずんだ色のきらめきと、餅に変わる「もちっ」。見ていた人の「！」
+    // 人狼の杖の先から飛ぶ、ずんだ色のきらめきと、餅に変わる「もちっ」。見ていた人の「！」
     if (nap && napEvent && napK >= -0.12 && napK <= 1) {
-      const giver = poses[this.byName.get(napEvent.by)?.seat ?? -1];
+      const giverMember = this.byName.get(napEvent.by);
+      const giver = poses[giverMember?.seat ?? -1];
       const target = poses[this.byName.get(napEvent.target)?.seat ?? -1];
       if (target) {
         const to = px(target);
         const fly = clamp01((napK + 0.125) / 0.135);
         if (fly < 1) {
-          // 役職を隠している時は、誰の手から出たかを見せない（上から降ってくる）
-          const from = options.secrets && giver ? { x: px(giver).x, y: px(giver).y - tile * 0.7 } : { x: to.x, y: to.y - tile * 2.4 };
+          // 役職を隠している時は、誰の杖から出たかを見せない（上から降ってくる）。見せている時は、ふり下ろした杖の先の星から（2026-11-23 杖にした）
+          let from = { x: to.x, y: to.y - tile * 2.4 };
+          if (options.secrets && giver && giverMember) {
+            const at = px(giver);
+            const side: -1 | 1 = Math.abs(target.x - giver.x) < 0.05 ? 1 : target.x < giver.x ? -1 : 1;
+            from = wandTip(at.x, at.y, ACTOR_SCALE, { side, k: 1 }, time, this.look(giverMember, time).seed);
+          }
           for (let i = 0; i < 7; i++) {
             const k = clamp01(easeOut(fly) - i * 0.06);
             if (k <= 0) continue;
@@ -1010,7 +1017,7 @@ export class Stage {
     }
 
     // 占い: 占い師の玉から、占われた人へ、むらさきの光が飛ぶ。届いたら、結果の札（役職を見せている時だけ）。
-    // 占われた狐は、その場で餅になる（「もちっ」は、役職を隠している時も出す。誰が占ったかは見せない）
+    // 占われた妖狐は、その場で餅になる（「もちっ」は、役職を隠している時も出す。誰が占ったかは見せない）
     // 結果の札は、名札・仕込みの札・ふきだしに隠れないよう、それらのあとで描く
     let divineTag: ((y: number) => void) | null = null;
     let divineTagAt = { x: 0, y: 0 };
@@ -1043,8 +1050,8 @@ export class Stage {
           }
           if (divineEvent.cursed && divineK < 0.8) drawText(ctx, 'もちっ！', to.x, to.y - tile * (1.35 + divineK * 0.45), { size: tile * 0.46, color: ZUNDA_DARK, stroke: '#fff', strokeWidth: tile * 0.12, align: 'center', alpha: hill(divineK / 0.8, 0.25), weight: 900 });
           if (options.secrets) {
-            // 結果の札（占い師にだけ分かったこと）。狐は「狐だった！」
-            const text = divineEvent.cursed ? '狐だった！' : divineEvent.fairy ? '妖精だった！' : '妖精ではない';
+            // 結果の札（占い師にだけ分かったこと）。妖狐は「妖狐だった！」
+            const text = divineEvent.cursed ? '妖狐だった！' : divineEvent.fairy ? '人狼だった！' : '人狼ではない';
             const fill = divineEvent.cursed ? ROLE_COLOR.fox : divineEvent.fairy ? ROLE_COLOR.nibbler : ROLE_COLOR.artisan;
             const show = clamp01((divineK - (divineEvent.cursed ? 0.5 : 0.05)) / 0.12) * clamp01((1.3 + divineHold - divineK) / 0.15);
             if (show > 0) divineTag = (y: number) => drawTag(ctx, to.x, y, text, fill, { size: Math.max(tile * 0.4, 30 / k), alpha: show });
@@ -1054,7 +1061,7 @@ export class Stage {
       }
     }
 
-    // 妖精が狐に手をかざしたが、餅にならなかった（役職を見せている時だけ）。ずんだ色の光が、狐に当たってはね返り、「効かない！」
+    // 人狼が妖狐に杖をふったが、餅にならなかった（役職を見せている時だけ）。ずんだ色の光が、妖狐に当たってはね返り、「効かない！」
     if (options.secrets) {
       for (const cue of this.misses) {
         const mk = (poseTime - cue.at) / Math.max(0.5, cue.end - cue.at);
@@ -1360,7 +1367,7 @@ export class Stage {
       const at = px(pose);
       const life = (poseTime - cue.at) / (cue.end - cue.at);
       const text = this.actionText(event, false, options.secrets);
-      // 占い師の「占う」は、むらさき（妖精のたくらみの赤と分ける）
+      // 占い師の「占う」は、むらさき（人狼のたくらみの赤と分ける）
       const seeing = event.action === 'divine';
       const sly = !seeing && (secret || (options.secrets && this.fakeWork(member.role) && event.action === 'do_task'));
       this.bubble(ctx, at.x, clear(at.x, at.y - tile * 1.5), text, { size: tile * 0.32, alpha: hill(life, 0.12), pop: easeBack(life / 0.12), fill: seeing ? '#efe7ff' : sly ? '#ffe3df' : '#fff', color: seeing ? '#5f3dc4' : sly ? '#b3271e' : INK });
@@ -1428,7 +1435,7 @@ export class Stage {
 
   /**
    * あかりが消えた時の暗がり（画面の座標で描く）。部屋はまっ暗にして、人のまわりだけを小さく照らす。
-   * 停電が起きたことが、ひと目で分かるように、照らす丸は役職によらず同じ大きさにする（妖精が暗くても見えることは、説明の絵と札で伝える）。
+   * 停電が起きたことが、ひと目で分かるように、照らす丸は役職によらず同じ大きさにする（人狼が暗くても見えることは、説明の絵と札で伝える）。
    */
   private drawDarkness(ctx: Ctx, now: WorldNow, poses: ActorPose[], fixSpots: Spot[], zoom: number, ox: number, oy: number, time: number): void {
     const fine = 0.5;
@@ -1474,7 +1481,7 @@ export class Stage {
 
   /**
    * 工房の道具を見ている人をカメラが映している間、その人に見えているものを、画面の左上に出す。
-   * 見取り図の盤は部屋ごとの人数、名札かけは全員の名札、防犯カメラの画面は廊下の4つの映像。
+   * シフト表は部屋ごとの人数、ずんだ餅ボードは全員の名札、防犯カメラの画面は廊下の4つの映像。
    */
   private drawLookPanel(ctx: Ctx, segment: RoamSegment, poses: ActorPose[], camera: Camera, poseTime: number, time: number): void {
     const shop = this.shop;
@@ -1513,7 +1520,7 @@ export class Stage {
     ctx.restore();
   }
 
-  /** 見取り図の盤: 工房の見取り図に、部屋ごとの人数。廊下は出ない。誰なのかも出ない。 */
+  /** シフト表: 工房の見取り図に、部屋ごとの人数。廊下は出ない。誰なのかも出ない。 */
   private drawAdminBody(ctx: Ctx, shop: Workshop, body: { x: number; y: number; w: number; h: number }, counts: Record<string, number> | null): void {
     const scale = Math.min(body.w / shop.mini.width, (body.h - 30) / shop.mini.height);
     const mw = shop.mini.width * scale;
@@ -1540,7 +1547,7 @@ export class Stage {
     drawText(ctx, '数字は、その部屋にいる人数（廊下の人は出ない・誰なのかは出ない）', body.x + body.w / 2, my + mh + 18, { size: 17, align: 'center', weight: 700, color: '#6b5a48' });
   }
 
-  /** 名札かけ: 全員の名札。ずんだ餅になった人と、クビになった人が分かる。 */
+  /** ずんだ餅ボード: 全員の名札。ずんだ餅になった人と、クビになった人が分かる。 */
   private drawVitalsBody(ctx: Ctx, body: { x: number; y: number; w: number; h: number }, tags: { name: string; status: 'awake' | 'asleep' | 'sent_home' }[] | null, poseTime: number, time: number): void {
     const status = this.statusAt(poseTime);
     const list = tags ?? this.members.map((m) => ({ name: m.name, status: status.get(m.name) === 'z' ? ('asleep' as const) : status.get(m.name) === 'x' ? ('sent_home' as const) : ('awake' as const) }));
@@ -1693,7 +1700,7 @@ export class Stage {
     });
   }
 
-  /** 工房の道具の、動く部分: 名札かけの名札・防犯カメラの画面の明かり・廊下のカメラの赤いランプ（工房の絵の座標で描く）。 */
+  /** 工房の道具の、動く部分: ずんだ餅ボードの名札・防犯カメラの画面の明かり・廊下のカメラの赤いランプ（工房の絵の座標で描く）。 */
   private drawDevicesNow(ctx: Ctx, tile: number, poseTime: number, time: number, inView: (x: number, y: number, pad: number) => boolean): void {
     const devices = this.show.log.roam?.map.devices;
     if (!devices) return;
@@ -2233,7 +2240,7 @@ export class Stage {
       const hidden = intent !== null && SECRET_ACTIONS.has(intent.action) && !options.secrets;
       const pose = poses[member.seat];
       const spot = pose?.state === 'w' ? this.spotAt(pose.x, pose.y) : null;
-      // 占い師と、条件つきの試合の狐の仕込みは本物なので、「（ふり）」と書かない（2026-11-21。前は、従業員でない人はみな「ふり」と出ていた）
+      // 占い師と、条件つきの試合の妖狐の仕込みは本物なので、「（ふり）」と書かない（2026-11-21。前は、従業員でない人はみな「ふり」と出ていた）
       const fake = options.secrets && this.fakeWork(member.role) && spot?.kind === 'station';
       const under = options.secrets && pose?.state === 'u';
       let doing = gone ? 'クビになった' : asleep ? (now.ghosts[member.seat] ? '心だけで仕込み中' : 'ずんだ餅になった') : '見回り中';
@@ -2481,7 +2488,7 @@ export class Stage {
         alpha = 1 - easeInOut(k);
         dy = easeInOut(k) * 20;
       } else if (decided && segment.result) {
-        // 従業員側から見て、よい結果か（妖精をクビにした）
+        // 従業員側から見て、よい結果か（人狼をクビにした）
         const good = segment.result.ejectedRole === 'nibbler';
         if (options.secrets) mood = SIDE_OF[member.role] === 'nibbler' ? (good ? 'worried' : ejected ? 'sly' : 'happy') : good ? 'happy' : ejected ? 'worried' : 'normal';
       }
@@ -2629,7 +2636,7 @@ export class Stage {
     return MEETING_HEAD.y + (this.show.log.roam?.config.deadline !== 0 ? 200 : 154) + MOCHI_FACE.gap;
   }
 
-  /** その集会の時点で、ずんだ餅になっている人（餅になった順。占われた狐も入る。クビになった人は入らない）。 */
+  /** その集会の時点で、ずんだ餅になっている人（餅になった順。占われた妖狐も入る。クビになった人は入らない）。 */
   private mochiFaces(segment: MeetingSegment): Member[] {
     const asleep = new Set(segment.info.absent.filter((a) => a.status === 'asleep').map((a) => a.name));
     const order: string[] = [];
@@ -2942,7 +2949,7 @@ export class Stage {
         drawText(ctx, `${result.ejected}に`, -410, -38, { size: 50, weight: 800, color: member.color.dark });
         drawText(ctx, 'クビにした', -410, 36, { size: 60, weight: 900 });
         if (result.ejectedRole) {
-          // 全員に知らされるのは、妖精だったかどうか（狐は「狐だった」）
+          // 全員に知らされるのは、人狼だったかどうか（妖狐は「妖狐だった」）
           const verdict = ejectVerdict(result.ejectedRole);
           const stamp = easeBack((sinceResult - 1.3) / 0.3);
           if (stamp > 0) {
@@ -2957,7 +2964,7 @@ export class Stage {
             ctx.lineWidth = 8;
             ctx.strokeStyle = color;
             ctx.stroke();
-            drawText(ctx, verdict.fairy ? '妖精' : verdict.fox ? '狐' : '妖精では', 0, -18, { size: verdict.fairy || verdict.fox ? 56 : 50, color, align: 'center', weight: 900 });
+            drawText(ctx, verdict.fairy ? '人狼' : verdict.fox ? '妖狐' : '人狼では', 0, -18, { size: verdict.fairy || verdict.fox ? 56 : 50, color, align: 'center', weight: 900 });
             drawText(ctx, verdict.fairy || verdict.fox ? 'だった！' : 'なかった…', 0, 34, { size: 38, color, align: 'center', weight: 800 });
             ctx.restore();
           }
@@ -3021,7 +3028,7 @@ export class Stage {
 
   /**
    * クビの場面。「クビのお知らせ」の紙が下りてきて、はんこ「クビ」がどん。本人は風呂敷を背負って、とぼとぼ出ていく。
-   * 最後に、全員に知らされること（妖精だったかどうか）の札を紙に押す。観戦者にだけ、本当の役職の付箋も貼る。
+   * 最後に、全員に知らされること（人狼だったかどうか）の札を紙に押す。観戦者にだけ、本当の役職の付箋も貼る。
    * 時刻は FIRED（はんこの音も同じ時刻で鳴らす）。下の案内役の帯（y 936〜）にはかからないようにする。
    */
   private drawFired(ctx: Ctx, member: Member, result: NonNullable<MeetingSegment['result']>, local: number, time: number, options: RenderOptions): void {
@@ -3081,7 +3088,7 @@ export class Stage {
       drawText(ctx, 'クビ', 0, 4, { size: 78, weight: 900, color: '#d63a2f', align: 'center' });
       ctx.restore();
     }
-    // 全員に知らされるのは、妖精だったかどうか（狐は「狐だった」）
+    // 全員に知らされるのは、人狼だったかどうか（妖狐は「妖狐だった」）
     if (result.ejectedRole) {
       const verdict = ejectVerdict(result.ejectedRole);
       const stamp = easeBack((local - FIRED.verdict) / 0.3);
@@ -3097,7 +3104,7 @@ export class Stage {
         ctx.lineWidth = 8;
         ctx.strokeStyle = color;
         ctx.stroke();
-        drawText(ctx, verdict.fairy ? '妖精' : verdict.fox ? '狐' : '妖精では', 0, -16, { size: verdict.fairy || verdict.fox ? 54 : 48, color, align: 'center', weight: 900 });
+        drawText(ctx, verdict.fairy ? '人狼' : verdict.fox ? '妖狐' : '人狼では', 0, -16, { size: verdict.fairy || verdict.fox ? 54 : 48, color, align: 'center', weight: 900 });
         drawText(ctx, verdict.fairy || verdict.fox ? 'だった！' : 'なかった…', 0, 34, { size: 36, color, align: 'center', weight: 800 });
         ctx.restore();
       }
@@ -3202,7 +3209,7 @@ export class Stage {
     ctx.restore();
     const sub = easeOut((local - 0.7) / 0.5);
     const hasTasks = (this.show.log.roam?.taskTotal ?? 0) > 0;
-    if (sub > 0) drawText(ctx, hasTasks ? '夜明け前の工房。ずんだの妖精に気をつけて、仕込みを終えられるか？' : '夜明け前の工房。開店まで、餅を守りきれるか？', W / 2, 286, { size: 40, align: 'center', weight: 700, color: '#fff', stroke: 'rgba(40, 24, 50, 0.8)', strokeWidth: 9, alpha: sub });
+    if (sub > 0) drawText(ctx, hasTasks ? '夜明け前の工房。人狼に気をつけて、仕込みを終えられるか？' : '夜明け前の工房。開店まで、餅を守りきれるか？', W / 2, 286, { size: 40, align: 'center', weight: 700, color: '#fff', stroke: 'rgba(40, 24, 50, 0.8)', strokeWidth: 9, alpha: sub });
 
     // 登場人物がひとりずつ出てくる（人数が多い時は、2列に並び、間をつめて出てくる）
     const n = this.members.length;
@@ -3237,7 +3244,7 @@ export class Stage {
       lines.forEach((line, row) => drawText(ctx, line, x, below + row * 28, { size: 22, align: 'center', weight: 700, color: '#f3e8cf', alpha: clamp01(appear) }));
     });
 
-    // ひとこと（妖精マニアがいる時は、2行にする）
+    // ひとこと（狂信者がいる時は、2行にする）
     if (local > 4.3) {
       const pop = easeBack((local - 4.3) / 0.4);
       const fans = this.madmen.length;
@@ -3246,15 +3253,15 @@ export class Stage {
       const culprits = this.nibblers.map((member) => member.name).join('と') || '？';
       const count = COUNT_WORD[this.nibblers.length] ?? `${this.nibblers.length}人`;
       if (options.secrets) {
-        lines.push({ text: `ずんだの妖精は${culprits}${fans + foxes > 0 ? '' : '（みんなには ないしょ）'}`, color: ROLE_COLOR.nibbler });
-        if (fans > 0) lines.push({ text: `妖精マニアは${this.madmen.map((member) => member.name).join('と')}${foxes > 0 ? '' : '（みんなには ないしょ）'}`, color: ROLE_COLOR.madman });
-        if (foxes > 0) lines.push({ text: `狐は${this.foxes.map((member) => member.name).join('と')}（みんなには ないしょ）`, color: ROLE_COLOR.fox });
+        lines.push({ text: `人狼は${culprits}${fans + foxes > 0 ? '' : '（みんなには ないしょ）'}`, color: ROLE_COLOR.nibbler });
+        if (fans > 0) lines.push({ text: `狂信者は${this.madmen.map((member) => member.name).join('と')}${foxes > 0 ? '' : '（みんなには ないしょ）'}`, color: ROLE_COLOR.madman });
+        if (foxes > 0) lines.push({ text: `妖狐は${this.foxes.map((member) => member.name).join('と')}（みんなには ないしょ）`, color: ROLE_COLOR.fox });
         const seers = this.members.filter((member) => member.role === 'seer');
         if (seers.length > 0) lines.push({ text: `占い師は${seers.map((member) => member.name).join('と')}（みんなには ないしょ）`, color: ROLE_COLOR.seer });
       } else {
-        lines.push({ text: `この中に${count || 'ひとり'}、ずんだの妖精がまぎれている`, color: ROLE_COLOR.nibbler });
-        if (fans > 0) lines.push({ text: `妖精に味方する人間も、${COUNT_WORD[fans] ?? `${fans}人`}いる`, color: ROLE_COLOR.madman });
-        if (foxes > 0) lines.push({ text: `勝ちを横取りする狐も、${COUNT_WORD[foxes] ?? `${foxes}人`}いる`, color: ROLE_COLOR.fox });
+        lines.push({ text: `この中に${count || 'ひとり'}、人狼がまぎれている`, color: ROLE_COLOR.nibbler });
+        if (fans > 0) lines.push({ text: `人狼に味方する人間も、${COUNT_WORD[fans] ?? `${fans}人`}いる`, color: ROLE_COLOR.madman });
+        if (foxes > 0) lines.push({ text: `勝ちを横取りする妖狐も、${COUNT_WORD[foxes] ?? `${foxes}人`}いる`, color: ROLE_COLOR.fox });
       }
       const size = lines.length > 2 ? 32 : lines.length > 1 ? 38 : 44;
       const h = lines.length > 2 ? 160 : lines.length > 1 ? 130 : 104;
@@ -3334,7 +3341,7 @@ export class Stage {
     ctx.fillStyle = artisans ? '#b8935f' : '#1f1829';
     ctx.fillRect(0, 842, W, 10);
 
-    // 紙ふぶき（従業員の勝ち）／ふってくる餅（妖精の勝ち）
+    // 紙ふぶき（従業員の勝ち）／ふってくる餅（人狼の勝ち）
     for (let i = 0; i < 90; i++) {
       const speed = 0.11 + rand(i + 3) * 0.12;
       const k = (local * speed + rand(i)) % 1;
@@ -3356,7 +3363,7 @@ export class Stage {
     const drop = easeBack(local / 0.6);
     ctx.save();
     ctx.translate(W / 2, 200 + (drop - 1) * 260);
-    const title = artisans ? '従業員たちの勝ち！' : stolen ? '狐の横取り！' : 'ずんだの妖精の勝ち！';
+    const title = artisans ? '従業員たちの勝ち！' : stolen ? '妖狐の横取り！' : '人狼の勝ち！';
     drawText(ctx, title, 0, 0, { size: 130, align: 'center', weight: 900, color: stolen ? '#ffb347' : artisans ? '#fff' : '#ffe27a', stroke: artisans ? '#b3541e' : '#2a1640', strokeWidth: 26 });
     ctx.restore();
     const whyK = easeOut((local - 0.9) / 0.5);
@@ -3364,16 +3371,16 @@ export class Stage {
       ctx.save();
       ctx.globalAlpha = whyK;
       plaque(ctx, W / 2 - 560, 288, 1120, 84, { radius: 42, fill: 'rgba(255, 253, 246, 0.95)' });
-      const was = segment.info.stolenFrom === 'artisan' ? '従業員' : 'ずんだの妖精';
+      const was = segment.info.stolenFrom === 'artisan' ? '従業員' : '人狼';
       drawText(ctx, stolen ? `${whyText(segment.info.why, this.nibblers.length)}……${was}の勝ち、のはずが` : whyText(segment.info.why, this.nibblers.length), W / 2, 332, { size: stolen ? 34 : 40, align: 'center', weight: 800 });
       ctx.restore();
     }
-    // 妖精が勝った時は、妖精マニアも勝ち
+    // 人狼が勝った時は、狂信者も勝ち
     const fanK = easeBack((local - 1.5) / 0.4);
     const fanText = stolen
-      ? `狐（${this.foxes.map((member) => member.name).join('・')}）が、最後まで起きていた！`
+      ? `妖狐（${this.foxes.map((member) => member.name).join('・')}）が、最後まで起きていた！`
       : !artisans && this.madmen.length > 0
-        ? `妖精マニア（${this.madmen.map((member) => member.name).join('・')}）も勝ち！`
+        ? `狂信者（${this.madmen.map((member) => member.name).join('・')}）も勝ち！`
         : null;
     if (fanText && fanK > 0) {
       const text = fanText;

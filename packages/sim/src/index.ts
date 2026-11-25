@@ -3,7 +3,9 @@ export type { Rng } from './rng.ts';
 export { createWorld } from './scenario.ts';
 export type { ScenarioOptions } from './scenario.ts';
 export { applyBallots, applySpeak, currentSpeaker, priorityOrder, resolveBallots } from './meeting.ts';
-export { buildCeremonyObservation, buildObservation, seatIdByName } from './observe.ts';
+export { buildCeremonyObservation, buildObservation, lastChanceOf, seatIdByName } from './observe.ts';
+export { crewCanWinAtMeeting, endgameOutlook, endOf, meetingOutcomes, patrolOutcome } from './endgame.ts';
+export type { EndCount, EndgameOutlook, EndSide, EjectChoice, NapsPerPatrol } from './endgame.ts';
 export type { CeremonyPhase } from './observe.ts';
 export { charCount, clockText, DEFAULT_MEETING_CONFIG, nameOf, playerById, RuleViolation } from './world.ts';
 export type {

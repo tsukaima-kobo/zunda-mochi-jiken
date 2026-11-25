@@ -3,6 +3,7 @@
 // 入力は観測と記憶と種だけ。真の状態は見ない（見ると、代用になった時だけ情報が漏れる）。
 
 import { NO_SUSPECT, NO_TARGET, openDuties, SABOTAGE_CRISIS, SABOTAGE_LIGHTS, SKIP_VOTE } from '../../protocol/src/index.ts';
+import type { Role } from '../../protocol/src/index.ts';
 import type { MeetingIntent, MeetingObservation, RoamObservation } from '../../protocol/src/index.ts';
 import { trimSay } from './guard.ts';
 import type { RoamDecision } from './guard.ts';
@@ -14,6 +15,9 @@ export function fewerNames(fact: string): string {
     return `${names.slice(0, 2).join('、')} ほか${names.length - 2}人`;
   });
 }
+
+/** 従業員側の人間（従業員・占い師）。台本では、同じに振る舞う。 */
+const onCrew = (role: Role) => role === 'artisan' || role === 'seer';
 
 function hash(text: string): number {
   let h = 0x811c9dc5;
@@ -28,19 +32,19 @@ function pick<T>(items: readonly T[], salt: string): T | undefined {
   return items.length > 0 ? items[hash(salt) % items.length] : undefined;
 }
 
-/** 「A が B に手をかざし…」という目撃の文から、A の名前を取り出す。 */
+/** 「A が B に杖をふり…」という目撃の文から、A の名前を取り出す。 */
 function namedGiver(text: string, names: readonly string[]): string | undefined {
   // 抜け道の出入りを見たという文も、同じ形（「A が …」）なので、同じように名前を取り出す
-  const at = Math.max(text.indexOf('に手をかざし'), text.indexOf('の床下の抜け道'));
+  const at = Math.max(text.indexOf('に杖をふ'), text.indexOf('の床下の抜け道'));
   if (at < 0) return undefined;
   const head = text.slice(0, at);
   // 「〜で A が B」の A。文の中でいちばん手前に出てくる名前
   return [...names].filter((name) => head.includes(`${name} が`)).sort((a, b) => head.indexOf(`${a} が`) - head.indexOf(`${b} が`))[0];
 }
 
-/** 「A を占ったら、妖精だった」という集会の発言から、A の名前を取り出す（占い師を名乗った人の名指し）。 */
+/** 「A を占ったら、人狼だった」という集会の発言から、A の名前を取り出す（占い師を名乗った人の名指し）。 */
 function namedFairy(text: string, names: readonly string[]): string | undefined {
-  const at = text.indexOf('を占ったら、妖精だった');
+  const at = text.indexOf('を占ったら、人狼だった');
   if (at < 0) return undefined;
   const head = text.slice(0, at);
   return [...names].filter((name) => head.includes(name)).sort((a, b) => head.lastIndexOf(b) - head.lastIndexOf(a))[0];
@@ -53,9 +57,9 @@ function ceremonyIntent(obs: MeetingObservation, salt: string): MeetingIntent {
   if (obs.phase === 'greet') {
     say = pick([`${self.name}です。今日もおいしいずんだ餅を作りましょう。`, `${self.name}です。開店まで、よろしくお願いします。`, `${self.name}です。みんなで気をつけて仕込みをしましょう。`], salt) as string;
   } else {
-    const won = obs.reveal?.result.includes(self.role === 'artisan' || self.role === 'seer' ? '従業員の勝ち' : '妖精の勝ち') ?? false;
+    const won = obs.reveal?.result.includes(onCrew(self.role) ? '従業員の勝ち' : '人狼の勝ち') ?? false;
     const nibblers = (obs.reveal?.roles ?? []).filter((r) => r.role === 'nibbler').map((r) => r.name);
-    const truth = self.role === 'nibbler' ? '妖精はわたしでした。' : `妖精は ${nibblers.join('と') || 'だれか'} でした。`;
+    const truth = self.role === 'nibbler' ? '人狼はわたしでした。' : `人狼は ${nibblers.join('と') || 'だれか'} でした。`;
     say =
       obs.phase === 'diary'
         ? `今日は工房で仕込みをした。${truth}${won ? 'うまくいって、ほっとした。' : 'くやしい一日だった。'}`
@@ -86,22 +90,23 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
     .filter((line) => line.speaker !== self.name)
     .map((line) => ({ by: line.speaker, who: namedGiver(line.text, [...others, self.name]) ?? namedFairy(line.text, [...others, self.name]) }))
     .find((c) => c.who !== undefined);
-  // 狐だと分かった、出席している相手（妖精が手をかざしても、餅にならなかった人。2026-11-21 から）。狐をクビにしないと、従業員も妖精も負ける
-  const knownFox = others.find((name) => obs.facts.some((fact) => fact.includes(`${name} は狐だ`)));
-  // 占い師: 占いで妖精だと分かった、出席している相手（いちばん確かな手がかり）。妖精ではなかった相手は、疑わない
+  // 妖狐だと分かった、出席している相手（人狼が杖をふっても、餅にならなかった人。2026-11-21 から）。妖狐をクビにしないと、従業員も人狼も負ける
+  const knownFox = others.find((name) => obs.facts.some((fact) => fact.includes(`${name} は妖狐だ`)));
+  // 占い師: 占いで人狼だと分かった、出席している相手（いちばん確かな手がかり）。人狼ではなかった相手は、疑わない
   const divined = self.divined ?? [];
   const foundFairy = divined.find((d) => d.fairy && others.includes(d.name))?.name;
   const cleared = new Set(divined.filter((d) => !d.fairy).map((d) => d.name));
 
   let suspect: string;
   if (self.role === 'madman') {
-    // 妖精マニア: 自分の目で見た妖精はかばい、名指しした人に疑いを向ける。決め手が無ければ、話題の人か誰かを疑う
-    const accused = sawGiver ?? claim?.who;
-    const accuser = claim && claim.by !== accused && others.includes(claim.by) ? claim.by : undefined;
-    const pool = others.filter((name) => name !== accused);
+    // 狂信者: 知っている人狼と、自分の目で見た人狼はかばい、名指しした人に疑いを向ける。決め手が無ければ、話題の人か誰かを疑う（人狼には入れない）
+    const fairy = (name?: string) => !!name && (self.allies.includes(name) || name === sawGiver);
+    const accused = claim?.who && self.allies.includes(claim.who) ? claim.who : (sawGiver ?? claim?.who);
+    const accuser = claim && claim.by !== accused && !fairy(claim.by) && others.includes(claim.by) ? claim.by : undefined;
+    const pool = others.filter((name) => name !== accused && !fairy(name));
     suspect =
       accuser ??
-      (mostMentioned && mostMentioned !== accused && mentions(mostMentioned) > 0 ? mostMentioned : undefined) ??
+      (mostMentioned && mostMentioned !== accused && !fairy(mostMentioned) && mentions(mostMentioned) > 0 ? mostMentioned : undefined) ??
       pick(pool, salt) ??
       abstain;
   } else if (self.role === 'nibbler') {
@@ -112,7 +117,10 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
         : (knownFox ?? (mostMentioned && mentions(mostMentioned) > 0 ? mostMentioned : pick(others, salt)) ?? abstain);
   } else {
     const open = others.filter((name) => !cleared.has(name));
+    // 最後の人狼で、妖狐もまだ起きているかもしれない時は、妖狐が分かっていれば妖狐を先に（最後の人狼を先にクビにすると、妖狐に横取りされて負け。2026-11-24 prompt.ts の「勝ち方」と合わせた）
+    const foxFirst = obs.stakes?.fairiesLeft === 1 && obs.stakes?.foxUp === true ? knownFox : undefined;
     suspect =
+      foxFirst ??
       foundFairy ??
       sawGiver ??
       knownFox ??
@@ -126,7 +134,7 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
   if (obs.phase === 'vote') {
     const target = suspect !== NO_SUSPECT && suspect !== SKIP_VOTE ? suspect : abstain;
     const memo = target === abstain ? '（台本）まだ決め手がない' : `（台本）${target} を疑っている`;
-    // 疑い度: 投票する相手は4、話題になっている人は2、そのほかは1。妖精は仲間を0にする
+    // 疑い度: 投票する相手は4、話題になっている人は2、そのほかは1。人狼は仲間を0にする
     const suspicion = others.map((name) => ({
       name,
       level: self.allies.includes(name) ? 0 : name === target ? 4 : mentions(name) > 0 ? 2 : 1,
@@ -134,22 +142,22 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
     return { kind: 'vote', thought: `（台本）${target} に入れる`, vote: target, memo, suspicion };
   }
 
-  // 話せる事実。妖精は自分のしたことを言わず、「ひとりで見回っていた」と言う
+  // 話せる事実。人狼は自分のしたことを言わず、「ひとりで見回っていた」と言う
   const shareable = obs.facts
     .filter((fact) => !fact.includes('変える機会がなかった') && !fact.includes('を占った: ') && !fact.includes('占う機会がなかった'))
-    // 全員が気づいた知らせは、話しても手がかりにならない。妖精は、自分の妨害や抜け道のことを言わない
+    // 全員が気づいた知らせは、話しても手がかりにならない。人狼は、自分の妨害や抜け道のことを言わない
     .filter((fact) => !/あかりが消えた|あかりがついた|焚かれすぎている|火が落ち着いた|の戸が閉まった/.test(fact))
     .filter((fact) => self.role !== 'nibbler' || !/あかりを消した|焚きすぎにした|の戸を閉めた|抜け道/.test(fact))
-    // 妖精マニアは、妖精を見たことを言わない
-    .filter((fact) => self.role !== 'madman' || !(fact.includes('に手をかざし') || fact.includes('の床下の抜け道')))
+    // 狂信者は、人狼を見たことを言わない
+    .filter((fact) => self.role !== 'madman' || !(fact.includes('に杖をふ') || fact.includes('の床下の抜け道')))
     .map((fact) => (fact.includes('ずんだ餅に変えた') ? `${fact.split(' ')[0]} はひとりで見回りをしていた` : deviceFact(fact)));
-  // 狐も、見た妖精のことは言う（妖精がいなくなれば試合が終わり、起きている狐の勝ちになる）
-  const witnessed = self.role === 'artisan' || self.role === 'fox' || self.role === 'seer' ? shareable.find((fact) => fact.includes('に手をかざし') || fact.includes('の床下の抜け道')) : undefined;
+  // 妖狐も、見た人狼のことは言う（人狼がいなくなれば試合が終わり、起きている妖狐の勝ちになる）
+  const witnessed = onCrew(self.role) || self.role === 'fox' ? shareable.find((fact) => fact.includes('に杖をふ') || fact.includes('の床下の抜け道')) : undefined;
   const discovery = shareable.find((fact) => fact.includes('見つけて') || fact.includes('見つけた'));
   let say: string;
   if (foundFairy) {
-    // 占い師: 妖精を見つけたら、名乗って結果を言う
-    say = `わたしは占い師。${foundFairy} を占ったら、妖精だった。`;
+    // 占い師: 人狼を見つけたら、名乗って結果を言う
+    say = `わたしは占い師。${foundFairy} を占ったら、人狼だった。`;
   } else if (witnessed) {
     say = `わたしは見た。${witnessed}。`;
   } else if (self.role === 'nibbler' && claim?.who === self.name) {
@@ -163,6 +171,11 @@ export function scriptedIntent(source: MeetingObservation, seed: number, memory:
         : (shareable[(hash(salt) + meeting.round) % Math.max(shareable.length, 1)] ?? '特に変わったことは見ていない');
     const question = meeting.round > 1 && suspect !== abstain ? `${suspect} は、そのころどこにいたの？` : '';
     say = `わたしは ${fewerNames(fact)}。${question}`;
+  }
+  // 黙ってよい集会の2巡目からは、名前が出ていなければ、話せる事実がない時と、3回に1回くらいは黙る（話すことがない時）
+  const named = meeting.transcript.some((line) => line.text.includes(self.name));
+  if (obs.mayPass && meeting.round > 1 && !foundFairy && !witnessed && !named && (shareable.length === 0 || hash(`${salt}:pass`) % 3 === 0)) {
+    return { kind: 'speak', thought: '（台本）言うことがないので黙る', say: '', suspect };
   }
   // 台本の発言は、上限より少し短めに切る（字幕が長く残って、声の無い間にならないように）
   return { kind: 'speak', thought: `（台本）疑い先: ${suspect}`, say: trimSay(say, Math.min(obs.limits.sayMaxChars, SCRIPTED_SAY_CHARS)), suspect };
@@ -206,17 +219,17 @@ export function questionFor(obs: RoamObservation): { speaker: string; text: stri
 function scriptedChat(obs: RoamObservation, seed: number, decision: RoamDecision): string {
   const salt = `${seed}:${obs.self.name}:chat:${obs.round}:${obs.clock}`;
   const roll = hash(salt) % 10;
-  const artisan = obs.self.role === 'artisan' || obs.self.role === 'seer';
+  const artisan = onCrew(obs.self.role);
   const others = obs.visible.filter((v) => !v.asleep && !obs.self.allies.includes(v.name));
   const sleeper = obs.visible.find((v) => v.asleep);
   const nextRoom = (obs.duties ?? []).flatMap((duty) => duty.steps.filter((step) => !step.done)).at(0)?.room;
   // 目の前で人が餅に変わった（従業員は、見たことをそのまま叫ぶ）
-  const witnessed = obs.events.find((event) => event.includes('に手をかざし'));
+  const witnessed = obs.events.find((event) => event.includes('に杖をふ'));
   if (witnessed && artisan) {
     const giver = namedGiver(witnessed, obs.roster);
-    // 狐に手をかざしても、餅にならない（2026-11-21 から）
-    if (witnessed.includes('ずんだ餅にならなかった')) return giver ? `見た！ いま${giver}が手をかざしたのに、餅にならなかった！` : '手をかざしたのに、餅にならない人がいた！';
-    return giver ? `見た！ いま${giver}が手をかざして、餅に変えた！` : 'うわっ、目の前で人が餅に！';
+    // 妖狐に杖をふっても、餅にならない（2026-11-21 から）
+    if (witnessed.includes('ずんだ餅にならなかった')) return giver ? `見た！ いま${giver}が杖をふったのに、餅にならなかった！` : '杖をふったのに、餅にならない人がいた！';
+    return giver ? `見た！ いま${giver}が杖をふって、餅に変えた！` : 'うわっ、目の前で人が餅に！';
   }
   if (sleeper && (artisan || decision.action === 'report')) return pick([`たいへん！ ${sleeper.name}がずんだ餅になってる！`, `${sleeper.name}！？ だれか来て！`], salt) as string;
   if (obs.trouble && decision.action === 'fix' && roll < 5) return obs.trouble.kind === 'lights' ? 'あかりが消えた！ 直しに行こう！' : 'かまどが大変！ 手を貸して！';
@@ -245,7 +258,7 @@ function anyDevice(obs: RoamObservation, salt: string): string | undefined {
   return pick((obs.devices ?? []).map((device) => device.name), `${salt}:device`);
 }
 
-/** 直前に見た見取り図の盤で、1人だけだった部屋。 */
+/** 直前に見たシフト表で、1人だけだった部屋。 */
 function loneRooms(obs: RoamObservation): string[] {
   const admin = deviceNamed(obs, 'admin');
   if (!admin || !obs.lastResult?.includes(`「${admin}」を見た: `)) return [];
@@ -260,8 +273,8 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
   const nibbler = obs.self.role === 'nibbler';
   const madman = obs.self.role === 'madman';
   const fox = obs.self.role === 'fox';
-  // 仲間は相手にしない（仲間の名前は、本人の観測に入っている）。妖精は、手をかざしても餅にならなかった相手（狐）も相手にしない
-  const foxSeen = (name: string) => [...obs.events, obs.lastResult ?? ''].some((text) => text.includes(`${name} は狐だ`));
+  // 仲間は相手にしない（仲間の名前は、本人の観測に入っている）。人狼は、杖をふっても餅にならなかった相手（妖狐）も相手にしない
+  const foxSeen = (name: string) => [...obs.events, obs.lastResult ?? ''].some((text) => text.includes(`${name} は妖狐だ`));
   const awake = obs.visible.filter((v) => !v.asleep && !obs.self.allies.includes(v.name) && !(nibbler && foxSeen(v.name)));
   const sleeper = obs.visible.find((v) => v.asleep);
   const elsewhere = () => pick(obs.rooms.filter((name) => name !== obs.where), `${salt}:room`) ?? (obs.rooms[0] as string);
@@ -293,17 +306,17 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
       }
     }
     if (trouble && roll < 3) return decide('直しに行って見せる', 'fix');
-    // 見取り図の盤で、ひとりきりの部屋が分かったら、そこへ行く
+    // シフト表で、ひとりきりの部屋が分かったら、そこへ行く
     const lone = loneRooms(obs).filter((room) => room !== obs.where);
     if (lone.length > 0 && roll < 7) {
       const room = pick(lone, `${salt}:lone`) as string;
-      return decide(`見取り図の盤で、${room} がひとりきりだと分かった。行ってみる`, 'move_to', room);
+      return decide(`シフト表で、${room} がひとりきりだと分かった。行ってみる`, 'move_to', room);
     }
-    // 力が使えるようになるまでの間に、たまに見取り図の盤を見る
+    // 力が使えるようになるまでの間に、たまにシフト表を見る
     const admin = deviceNamed(obs, 'admin');
-    if (admin && (obs.napCooldown ?? 0) > 8 && roll2 === 0) return decide('見取り図の盤で、ひとりきりの人を探す', 'check', admin);
+    if (admin && (obs.napCooldown ?? 0) > 8 && roll2 === 0) return decide('シフト表で、ひとりきりの人を探す', 'check', admin);
   } else if (madman) {
-    // 妖精マニア: 見つけても、たいていは知らせない。困りごとは、目立たない程度にだけ直しに行く
+    // 狂信者: 見つけても、たいていは知らせない。困りごとは、目立たない程度にだけ直しに行く
     if (sleeper && roll < 3) return decide(`ずんだ餅になった ${sleeper.name} を知らせる（疑われないように）`, 'report', sleeper.name);
     if (sleeper) {
       const room = elsewhere();
@@ -315,7 +328,7 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     const device = anyDevice(obs, salt);
     if (device && !trouble && roll2 === 0) return decide(`${device} を見に行く`, 'check', device);
   } else if (fox) {
-    // 狐: 起きたまま試合が終わればよい。たいていは知らせる（妖精がクビになれば早く終わる）。ひとりきりを避けて、人のそばにいる
+    // 妖狐: 起きたまま試合が終わればよい。たいていは知らせる（人狼がクビになれば早く終わる）。ひとりきりを避けて、人のそばにいる
     if (sleeper && roll < 7) return decide(`ずんだ餅になった ${sleeper.name} を知らせる`, 'report', sleeper.name);
     if (sleeper) {
       const room = elsewhere();
@@ -327,7 +340,7 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     if (work && work.done < work.need && openDuties(obs).length > 0 && roll < 8) return decide('横取りのために、自分の仕込みを進める', 'do_task');
     const buddy = pick(awake, `${salt}:buddy`);
     if (buddy && awake.length <= 2 && roll < 5) return decide(`${buddy.name} のそばにいる`, 'follow', buddy.name);
-    // ときどき工房の道具を見に行く（名札かけで、残りの人数を確かめる）
+    // ときどき工房の道具を見に行く（ずんだ餅ボードで、残りの人数を確かめる）
     const device = anyDevice(obs, salt);
     if (device && !trouble && roll2 === 0) return decide(`${device} を見に行く`, 'check', device);
   } else {
@@ -340,7 +353,7 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     }
     if (obs.activity.includes('占おうとしている')) return decide('占いを続ける', 'divine', (obs.visible.find((v) => obs.activity.startsWith(`${v.name} に近づいて`))?.name ?? NO_TARGET));
     // 決め手になることを目の前で見たら、鐘を鳴らしに行く
-    const decisive = obs.events.some((event) => event.includes('に手をかざし') || event.includes('床下の抜け道'));
+    const decisive = obs.events.some((event) => event.includes('に杖をふ') || event.includes('床下の抜け道'));
     if (decisive && obs.bell && obs.bell.usesLeft > 0 && obs.bell.waitSeconds === 0 && !trouble) return decide('見たことを知らせに、鐘を鳴らしに行く', 'call_meeting');
     if (trouble?.kind === 'crisis') return decide('かまどを落ち着かせに行く', 'fix');
     if (trouble?.kind === 'lights' && roll < 6) return decide('あかりを直しに行く', 'fix');
@@ -354,7 +367,7 @@ function scriptedRoamAction(obs: RoamObservation, seed: number): RoamDecision {
     if (device && !trouble && openDuties(obs).length === 0 && roll < 5) return decide(`${device} を見に行く`, 'check', device);
   }
 
-  // 仕込み。妖精と妖精マニアは、ふりをしたり、人を探して歩いたりする
+  // 仕込み。人狼と狂信者は、ふりをしたり、人を探して歩いたりする
   if (openDuties(obs).length > 0 && ((!nibbler && !madman && !fox) || roll < 6)) return decide(nibbler || madman || (fox && !obs.self.foxWork) ? '仕込みのふりをする' : '仕込みを進める', 'do_task');
 
   const someone = pick(awake, `${salt}:who`);

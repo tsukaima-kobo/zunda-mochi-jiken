@@ -1,5 +1,5 @@
 // カメラの係。見回りのあいだ、誰をどのくらいの近さで映すかを、記録から決める。
-// 記録は先まで分かっているので、人をずんだ餅に変える少し前から、変える妖精を追いかけることができる。
+// 記録は先まで分かっているので、人をずんだ餅に変える少し前から、変える人狼を追いかけることができる。
 // 見どころ: ずんだ餅に変える、見つけて知らせる、鐘を鳴らす、妨害が始まる、困りごとを直す、床下の抜け道を通る。
 // どの時刻のカメラも、その時刻だけから決まる（再生位置を動かしても同じ絵になる）。
 
@@ -53,7 +53,7 @@ export interface Shot {
   /**
    * start: 見回りの始まり / patrol: 順番に追う / target: このあと狙われる人 / nap: ずんだ餅に変える（名前は前の題材のなごり） / report: 見つけて知らせる /
    * bell: 中庭の鐘を鳴らしに行く / sabotage: 妨害が始まる / fix: 困りごとを直す / sneak: 床下の抜け道を通る / chat: 声に出して話している /
-   * look: 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見ている /
+   * look: 工房の道具（シフト表・ずんだ餅ボード・防犯カメラの画面）を見ている /
    * pass: ずんだ餅を見たのに、知らせる前に通りすぎる
    */
   why: 'start' | 'patrol' | 'target' | 'nap' | 'divine' | 'report' | 'bell' | 'sabotage' | 'fix' | 'sneak' | 'chat' | 'look' | 'pass';
@@ -150,7 +150,7 @@ export class Director {
 
     // 見どころ。key は、その場面でいちばん見せたい瞬間（ほかの見どころと重なった時も、ここは残す）
     const naps: Shot[] = [];
-    /** 抜け道から出てくる所を、妖精でない人に見られた瞬間（渡す場面と同じく、必ず映す）。 */
+    /** 抜け道から出てくる所を、人狼でない人に見られた瞬間（渡す場面と同じく、必ず映す）。 */
     const seenExits: Shot[] = [];
     const extras: { shot: Shot; key: number; rank: number }[] = [];
     for (const cue of cues) {
@@ -169,7 +169,7 @@ export class Director {
           naps.push({ start: cue.at - 0.2, end: cue.at + NAP_HOLD, kind: 'follow', subject: target, other: target, zoom: ZOOM.close, why: 'nap' });
         }
       } else if (event.type === 'nap_failed') {
-        // 妖精が狐に手をかざしたが、餅にならなかった（役職を見せている時だけ。手をかざすと決めた所から）
+        // 人狼が妖狐に杖をふったが、餅にならなかった（役職を見せている時だけ。杖をふると決めた所から）
         if (secrets) {
           const decided = cues.filter((c) => c.event.type === 'decide' && c.event.agent === event.by && c.event.applied && c.event.action.startsWith('transform') && c.at <= cue.at).at(-1);
           const lead = Math.min(6, Math.max(2.2, cue.at - (decided?.at ?? cue.at) + 0.6));
@@ -179,7 +179,7 @@ export class Director {
         const seer = this.seatOf(event.by);
         const target = this.seatOf(event.target);
         if (secrets) {
-          // 占うと決めて近づく所から、結果の札が消えるまで。狐が餅になる時は、餅に変わる時と同じあつかい（ほかの見どころより先）
+          // 占うと決めて近づく所から、結果の札が消えるまで。妖狐が餅になる時は、餅に変わる時と同じあつかい（ほかの見どころより先）
           const decided = lastDecided(event.by, 'divine', cue.at);
           const lead = Math.min(6, Math.max(2.2, cue.at - (decided?.at ?? cue.at) + 0.6));
           // 案内役が結果を言い終わるのが遅い時は、札が消える（cue.end + 0.8）まで映す
@@ -221,7 +221,7 @@ export class Director {
             near = time;
           }
         }
-        // 始まりは、近づく1秒前（その前に、妖精が抜け道へもぐる所などを映していることがあるので、長くは取らない）
+        // 始まりは、近づく1秒前（その前に、人狼が抜け道へもぐる所などを映していることがあるので、長くは取らない）
         if (Number.isFinite(closest)) {
           // 餅と一緒に映すのは、通りすぎる間だけ。そのあとは本人を追う（離れていく2人を一緒に映すと、本人が字幕の後ろへ行く）
           const split = Math.min(cue.at, near + PASS_PAIR_AFTER);
@@ -273,7 +273,7 @@ export class Director {
         const seat = this.seatOf(event.by);
         extras.push({ shot: { start: cue.at - 2.2, end: out + 1.6, kind: 'follow', subject: seat, other: seat, zoom: ZOOM.close, why: 'sneak' }, key: cue.at, rank: 4 });
       } else if (event.type === 'sneak' && event.phase === 'out' && secrets) {
-        // 抜け道から出てくる所を、妖精でない人に見られた時は、その瞬間を、見た人と一緒に必ず映す。
+        // 抜け道から出てくる所を、人狼でない人に見られた時は、その瞬間を、見た人と一緒に必ず映す。
         // （同じ時刻に別の場所で餅に変える場面があると、カメラがそちらへ行って、出てくる所が映らないことがあった）
         const eye = event.witnesses.map((name) => this.cast.find((member) => member.name === name)).find((member) => member !== undefined && !member.nibbler);
         if (eye) seenExits.push({ start: cue.at - 1, end: cue.at + 2.2, kind: 'pair', subject: this.seatOf(event.by), other: eye.seat, zoom: ZOOM.close, why: 'sneak' });
@@ -423,7 +423,7 @@ export class Director {
       const nibblers = awake.filter((member) => member.nibbler);
       const others = awake.filter((member) => !secrets || !member.nibbler);
       turn += 1;
-      // 役職を見せている時は、妖精とほかの人を交互に追う（妖精がふたりなら、そのふたりも交互に）
+      // 役職を見せている時は、人狼とほかの人を交互に追う（人狼がふたりなら、そのふたりも交互に）
       const nibbler = nibblers[Math.floor(turn / 2) % Math.max(1, nibblers.length)];
       if (secrets && nibbler && turn % 2 === 0 && nibbler.seat !== previous) return nibbler.seat;
       const pool = others.filter((member) => member.seat !== previous);

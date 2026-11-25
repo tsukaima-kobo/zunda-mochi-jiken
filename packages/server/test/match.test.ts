@@ -13,7 +13,7 @@ const base = { map, denyList: [], now: fixedClock } as const;
 
 /**
  * 受け取った要求を全部覚えておき、プロンプトとスキーマだけを見て試合を進める頭脳。
- * 妖精なら見えている相手をずんだ餅に変え、ずんだ餅になった人が見えたら知らせ、ほかは部屋を回る。
+ * 人狼なら見えている相手をずんだ餅に変え、ずんだ餅になった人が見えたら知らせ、ほかは部屋を回る。
  */
 class PlayingBrain implements Brain {
   readonly id: string;
@@ -134,9 +134,7 @@ describe('試合（見回りと集会）', () => {
     }
     expect(wins.artisan).toBeGreaterThan(100);
     expect(wins.nibbler).toBeGreaterThan(100);
-    // どちらの陣営も勝つ（開店まで守りきる勝ち方は、小さいマップの台本ボットでは、まれにしか起きない）
-    expect(whys.has('nibbler_sent_home') && whys.has('outnumbered')).toBe(true);
-    for (const why of whys) expect(['nibbler_sent_home', 'opened', 'outnumbered', 'tasks_done', 'crisis', 'late']).toContain(why);
+    expect([...whys].sort()).toEqual(['nibbler_sent_home', 'opened', 'outnumbered']);
   }, 120_000);
 
   for (const seed of [1, 2, 3, 7, 12]) {
@@ -170,8 +168,8 @@ describe('試合（見回りと集会）', () => {
           if (other !== me) expect(bytes).not.toContain(`CANARY-${other}-`);
         }
         if (world.players[me]!.role === 'artisan') {
-          expect(bytes).not.toContain('あなたはずんだの妖精です');
-          // 妖精だけの行動と状態は、従業員に渡る文字列のどこにも出ない
+          expect(bytes).not.toContain('あなたは人狼です');
+          // 人狼だけの行動と状態は、従業員に渡る文字列のどこにも出ない
           expect(bytes).not.toMatch(/transform|nap|【ずんだ餅に変える力】|ずんだ餅に変えた/);
         }
         // 座標や内部の番号は、どの頭脳にも渡らない

@@ -1,4 +1,4 @@
-// 広い工房・11人の試合の決まり（仕込み、困りごと、戸、床下の抜け道、心だけの人、鐘、妖精マニア）が、
+// 広い工房・11人の試合の決まり（仕込み、困りごと、戸、床下の抜け道、心だけの人、鐘、狂信者）が、
 // 記録だけから、時刻の関数として上映の時間軸に乗ること。
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -16,16 +16,16 @@ import { colorOf, ejectTruth, ejectVerdict, H, plainThought, ROLE_COLOR, ROLE_LA
 const load = (name: string) => JSON.parse(readFileSync(path.resolve(import.meta.dirname, `../../../content/maps/${name}.json`), 'utf8'));
 const big = load('workshop');
 /** 前の題材のころの、実物の頭脳の記録（この機体にあれば確かめる）。 */
-const OLD_REAL = path.resolve(import.meta.dirname, '../../../matches/m43-20261116T233146/match.json');
+const OLD_REAL = path.resolve(import.meta.dirname, '../../../matches/old-real/match.json');
 const small = load('workshop-small');
 
 const logs = new Map<string, Promise<MatchLog>>();
-/** 台本ボットだけの、11人の試合（同じ種は1回だけ回す）。fan なら、狐の代わりに妖精マニアを入れる。 */
+/** 台本ボットだけの、11人の試合（同じ種は1回だけ回す）。fan なら、妖狐の代わりに狂信者を入れる。 */
 function play(seed: number, fan = false): Promise<MatchLog> {
   const key = `${seed}:${fan}`;
   let log = logs.get(key);
   if (!log) {
-    // カメラの係の試験は、前の試合の中身（狐の横取りに条件の無い決まり）で確かめる。条件を足すと台本ボットの狐の動きが変わり、試合の中身が変わるため（2026-11-21）
+    // カメラの係の試験は、前の試合の中身（妖狐の横取りに条件の無い決まり）で確かめる。条件を足すと台本ボットの妖狐の動きが変わり、試合の中身が変わるため（2026-11-21）
     log = runMatch({ seed, map: big, players: 11, brains: [null], denyList: [], roam: fan ? { madmen: 1, foxes: 0 } : { foxSteps: 0 } });
     logs.set(key, log);
   }
@@ -41,8 +41,9 @@ const roamAt = (show: Show, time: number) => roamsOf(show).find((roam) => time >
 // 登場人物の名前が変わると、台本ボットの動きも変わる（名前を含む発言に反応するため）。そのたびに選び直す
 // 25: 妨害・戸（閉まった部屋をカメラが映す）・抜け道 / 34: 中庭の鐘と、開店に間に合わない / 12: 仕込みが終わる / 54: 中庭の鐘
 // 公開版の登場人物（色の名前の餅）で選んだ種。台本ボットは名前を乱数に使うので、登場人物が変わると試合も変わる。
-// 68: 仕込みが終わって勝つ・鐘・戸・抜け道・かまど / 25・51: あかり・かまど・戸・抜け道。3つで、妨害3種・直す・戸が開く・抜け道・鐘がそろう（台本ボットで鐘が鳴る種は少ない）
-const SEEDS = [68, 25, 51];
+// 2026-11-25: 狂信者が人狼を知る・黙ってよい集会・妖狐の仕込みの条件なしを入れた最新化で、選び直した。台本ボットで鐘が鳴る種は少ない（1〜500 で 30 あまり）
+// 147: 仕込みが終わって勝つ・鐘・戸・抜け道・かまど・あかり / 3・8: 仕込みが終わって勝つ・あかり・かまど・戸・抜け道（戸が開く）
+const SEEDS = [147, 3, 8];
 
 describe('見回りの新しいできごとの時間軸', () => {
   it('仕込み・妨害・直した・戸・抜け道・鐘は、起きた時刻に並ぶ', async () => {
@@ -225,7 +226,7 @@ describe('見回りの新しいできごとの時間軸', () => {
     expect(passed).toBeGreaterThan(0);
   });
 
-  it('心だけの姿は、ずんだ餅になった従業員にだけ出る（妖精と妖精マニアには出ない）', async () => {
+  it('心だけの姿は、ずんだ餅になった従業員にだけ出る（人狼と狂信者には出ない）', async () => {
     let dreams = 0;
     for (const seed of SEEDS) {
       const log = await play(seed);
@@ -299,7 +300,7 @@ describe('見回りの新しいできごとの時間軸', () => {
   });
 });
 
-describe('カメラの係（11人・妖精2人・妖精マニア1人）', () => {
+describe('カメラの係（11人・人狼2人・狂信者1人）', () => {
   const sites: Sites = {
     rooms: Object.fromEntries(Object.entries(doorRectsOf(big)).map(([room, doors]) => [room, { x: doors[0]!.x + 0.5, y: doors[0]!.y + 0.5 }])),
     fix: {
@@ -362,7 +363,7 @@ describe('カメラの係（11人・妖精2人・妖精マニア1人）', () => 
               expect(camera.subject).toBeNull();
             }
           } else if (shot.why === 'sneak') {
-            // 床下へもぐる所か、出てくる所を妖精でない人に見られた瞬間（2026-11-22 から。見た人と一緒に映す）
+            // 床下へもぐる所か、出てくる所を人狼でない人に見られた瞬間（2026-11-22 から。見た人と一緒に映す）
             const dive = show.sneaks.some((span) => span.seat === shot.subject && span.start >= shot.start - 1e-6 && span.start <= shot.end);
             const seenExit = shot.kind === 'pair' && show.sneaks.some((span) => span.seat === shot.subject && span.seenOut.length > 0 && span.end >= shot.start - 1e-6 && span.end <= shot.end + 1e-6);
             expect(dive || seenExit).toBe(true);
@@ -379,10 +380,10 @@ describe('カメラの係（11人・妖精2人・妖精マニア1人）', () => 
     expect(places).toBeGreaterThan(0);
   });
 
-  it('見回りを順に追う時は、起きている妖精を、かわるがわる映す', async () => {
-    // 2人とも起きていて、順に追う場面が何度もある種（公開版の登場人物で選んだ）。
+  it('見回りを順に追う時は、起きている人狼を、かわるがわる映す', async () => {
+    // 2人とも起きていて、順に追う場面が何度もある種（公開版の登場人物で選んだ。2026-11-25 に 51 から 147 に選び直した）。
     // 話している所のあいだは、よそへ飛ばずに映し続けるので（director.ts の HOLD_SECONDS）、順に追う場面は少ない。試合を通して、2人とも映す
-    const { director, roams, cast } = await stage(51);
+    const { director, roams, cast } = await stage(147);
     const nibblers = cast.filter((c) => c.nibbler).map((c) => c.seat);
     const patrol = roams.flatMap((roam) => director.shotsFor(roam, true).filter((shot) => shot.why === 'patrol').map((shot) => shot.subject));
     for (const seat of nibblers) expect(patrol).toContain(seat);
@@ -397,7 +398,7 @@ describe('カメラの係（11人・妖精2人・妖精マニア1人）', () => 
         });
       }
     }
-    // 役職を隠す時は、妖精をひいきしない: 順に追う相手が、妖精ばかりにならない
+    // 役職を隠す時は、人狼をひいきしない: 順に追う相手が、人狼ばかりにならない
     const plain = roams.flatMap((roam) => director.shotsFor(roam, false).filter((shot) => shot.why === 'patrol').map((shot) => shot.subject));
     expect(plain.filter((seat) => !nibblers.includes(seat)).length).toBeGreaterThan(plain.length / 2);
   });
@@ -493,24 +494,23 @@ describe('11人の名前と言い回し', () => {
   });
 });
 
-describe('ずんだの妖精・妖精マニア・狐', () => {
-  it('妖精マニアと狐には、従業員とも妖精とも違う色と呼び名がある', () => {
-    expect(ROLE_LABEL).toEqual({ artisan: '従業員', nibbler: 'ずんだの妖精', madman: '妖精マニア', fox: '狐', seer: '占い師' });
-    expect(ROLE_SHORT.nibbler).toBe('妖精');
+describe('人狼・狂信者・妖狐', () => {
+  it('狂信者と妖狐には、従業員とも人狼とも違う色と呼び名がある', () => {
+    expect(ROLE_LABEL).toEqual({ artisan: '従業員', nibbler: '人狼', madman: '狂信者', fox: '妖狐', seer: '占い師' });
+    expect(ROLE_SHORT.nibbler).toBe('人狼');
     expect(new Set([ROLE_COLOR.artisan, ROLE_COLOR.nibbler, ROLE_COLOR.madman, ROLE_COLOR.fox, ROLE_COLOR.seer]).size).toBe(5);
     expect(SIDE_OF).toEqual({ artisan: 'artisan', nibbler: 'nibbler', madman: 'nibbler', fox: 'fox', seer: 'artisan' });
     expect(ejectVerdict('seer')).toEqual(ejectVerdict('artisan'));
     expect(ejectTruth('seer', true)).toBe('本当は占い師');
-    // クビになった狐は、全員に「狐だった」と知らされる（2026-11-21 から）。全員に知らされたことと同じなので、観戦者だけの付箋は出さない
-    expect(ejectVerdict('fox')).toEqual({ text: '狐だった', fairy: false, fox: true });
+    // クビになった妖狐は、全員に「妖狐だった」と知らされる（2026-11-21 から）。全員に知らされたことと同じなので、観戦者だけの付箋は出さない
+    expect(ejectVerdict('fox')).toEqual({ text: '妖狐だった', fairy: false, fox: true });
     expect(ejectTruth('fox', true)).toBeNull();
   });
 
-  it('クビになった妖精マニアは、全員には従業員と同じ「妖精ではなかった」と出て、観戦者にだけ本当の役職が出る', async () => {
+  it('クビになった狂信者は、全員には従業員と同じ「人狼ではなかった」と出て、観戦者にだけ本当の役職が出る', async () => {
     let found = 0;
-    // 妖精マニアがクビになる種（2026-11-19、工房の道具を足した時に選び直した。2026-11-21 夜、焚きすぎの直す場所を氷室へ移して 17・37 に、同じ夜に仕込みの配り方を変えて 2・22、仕込みを3つずつ出す決まりにして 41・74 に選び直した）
-    // 2026-11-22、餅のすぐそばまで歩いてから知らせる決まりにして、113・169 に選び直した
-    for (const seed of [113, 169]) {
+    // 狂信者がクビになる種（決まりや台本ボットが変わるたびに選び直す。2026-11-25: 狂信者が人狼を知る・黙ってよい集会を入れて、47・49 に選び直した）
+    for (const seed of [47, 49]) {
       const log = await play(seed, true);
       const withMadman = log.players.some((p) => p.role === 'madman');
       expect(withMadman).toBe(true);
@@ -518,19 +518,19 @@ describe('ずんだの妖精・妖精マニア・狐', () => {
         if (event.type !== 'meeting_end' || event.ejectedRole !== 'madman') continue;
         found++;
         expect(ejectVerdict('madman')).toEqual(ejectVerdict('artisan'));
-        expect(ejectVerdict('madman').text).toBe('妖精ではなかった');
-        expect(ejectTruth('madman', withMadman)).toBe('本当は妖精マニア');
+        expect(ejectVerdict('madman').text).toBe('人狼ではなかった');
+        expect(ejectTruth('madman', withMadman)).toBe('本当は狂信者');
       }
     }
     expect(found).toBeGreaterThan(0);
-    expect(ejectVerdict('nibbler')).toEqual({ text: '妖精だった', fairy: true, fox: false });
+    expect(ejectVerdict('nibbler')).toEqual({ text: '人狼だった', fairy: true, fox: false });
     expect(ejectTruth('nibbler', true)).toBeNull();
-    // 妖精マニアのいない試合では、従業員だったことは「妖精ではなかった」で分かるので、重ねて出さない
+    // 狂信者のいない試合では、従業員だったことは「人狼ではなかった」で分かるので、重ねて出さない
     expect(ejectTruth('artisan', false)).toBeNull();
     expect(ejectTruth('artisan', true)).toBe('従業員だった');
   });
 
-  it('前の題材の記録（行動の名前が nap、妖精マニアがいない）でも、時間軸を作れる', async () => {
+  it('前の題材の記録（行動の名前が nap、狂信者がいない）でも、時間軸を作れる', async () => {
     const modern = await play(9);
     const old = {
       ...modern,
@@ -543,7 +543,7 @@ describe('ずんだの妖精・妖精マニア・狐', () => {
       }),
     } as unknown as MatchLog;
     const show = buildShow(old, null);
-    // 違いは、妖精が「ねらっている」という案内役の一言（新しい行動の名前の時だけ言う）で、見回りの終わりの待ちと、声が詰まった所で絵をゆっくり流す分が変わるだけ
+    // 違いは、人狼が「ねらっている」という案内役の一言（新しい行動の名前の時だけ言う）で、見回りの終わりの待ちと、声が詰まった所で絵をゆっくり流す分が変わるだけ
     expect(Math.abs(show.total - buildShow(modern, null).total)).toBeLessThan(25);
     expect(show.cues.filter((cue) => cue.event.type === 'decide' && cue.event.action.startsWith('nap')).length).toBeGreaterThan(0);
     const sites: Sites = {
@@ -555,7 +555,7 @@ describe('ずんだの妖精・妖精マニア・狐', () => {
     expect(shots.some((shot) => shot.why === 'nap')).toBe(true);
   });
 
-  it.skipIf(!existsSync(OLD_REAL))('保存してある前の題材の実物の記録（m43）も、時間軸を作れる', () => {
+  it.skipIf(!existsSync(OLD_REAL))('保存してある前の題材の実物の記録も、時間軸を作れる', () => {
     const log = JSON.parse(readFileSync(OLD_REAL, 'utf8')) as MatchLog;
     const show = buildShow(log, null);
     expect(show.segments.at(-1)?.kind).toBe('ending');

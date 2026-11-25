@@ -3,8 +3,28 @@
 
 import { NO_SUSPECT, SKIP_VOTE } from '../../protocol/src/index.ts';
 import type { MeetingObservation } from '../../protocol/src/index.ts';
-import { castOf, foxesOutOf, nameOf, playerById } from './world.ts';
+import { endgameOutlook } from './endgame.ts';
+import { alliesOf, castOf, foxesOutOf, nameOf, playerById } from './world.ts';
 import type { MeetingWorld, PlayerId, PlayerTruth } from './world.ts';
+
+/**
+ * 「ここで誰もクビにならないと、従業員が勝てなくなる」局面か（endgame.ts の読み。人数だけの全探索で確かめてある）。
+ * 起きている人数が、クビにしないといけない相手（人狼と、まだ起きているかもしれない妖狐）の人数×2＋1 以下の時（人狼が2人以上いる間は、見回り1回で2人が餅になることがあるので、人狼の数−1だけ多く見る）。
+ */
+export function lastChanceOf(awake: number, fairiesLeft: number, foxUp: number): boolean {
+  return fairiesLeft > 0 && endgameOutlook(awake, fairiesLeft, foxUp > 0, 'each').meeting === 'last';
+}
+
+/** 集会の局面（全員に公開された情報だけ）。 */
+export function stakesOf(awake: number, fairiesLeft: number, foxUp: number): NonNullable<MeetingObservation['stakes']> {
+  return {
+    awake,
+    fairiesLeft,
+    lastChance: lastChanceOf(awake, fairiesLeft, foxUp),
+    ...(foxUp > 0 ? { foxUp: true } : {}),
+    ...(fairiesLeft > 0 && endgameOutlook(awake, fairiesLeft, foxUp > 0, 'one').meeting === 'last' ? { skipFatal: true } : {}),
+  };
+}
 
 export function buildObservation(world: MeetingWorld, agentId: PlayerId): MeetingObservation {
   const me = playerById(world, agentId);
@@ -12,19 +32,17 @@ export function buildObservation(world: MeetingWorld, agentId: PlayerId): Meetin
   if (!meeting.seats.includes(agentId)) throw new Error('会議に出ていない人の観測は作れません');
   if (meeting.phase === 'done') throw new Error('会議は終わっています');
 
-  // 妖精どうしだけが互いを知る。従業員と妖精マニアには、誰の役職も渡さない（人数だけは全員が知っている）。
-  const allies =
-    me.role === 'nibbler'
-      ? world.players.filter((p) => p.role === 'nibbler' && p.id !== agentId).map((p) => p.name)
-      : [];
+  // 人狼どうしは互いを知る。狂信者は、誰が人狼かを知っている（人狼は、誰が狂信者かを知らない）。従業員には、誰の役職も渡さない（人数だけは全員が知っている）。
+  const allies = alliesOf(world, me.role, agentId);
 
   // 候補は席順（全員が見ている並び）で、本人を除く。役職や生成順で並べない。
   const others = meeting.seats.filter((id) => id !== agentId).map((id) => nameOf(world, id));
 
-  // 局面: 妖精の人数（全員が知っている）から、「妖精だった」と公表された人（クビになった妖精）を引く。どちらも公開の情報
+  // 局面: 人狼の人数（全員が知っている）から、「人狼だった」と公表された人（クビになった人狼）を引く。どちらも公開の情報
   const cast = castOf(world);
   const fairiesLeft = cast.nibblers - world.players.filter((p) => p.status === 'sent_home' && p.role === 'nibbler').length;
   const awake = meeting.seats.length;
+  const foxUp = Math.max(0, (cast.foxes ?? 0) - (foxesOutOf(world).foxesOut ?? 0));
 
   return {
     kind: 'meeting',
@@ -34,7 +52,8 @@ export function buildObservation(world: MeetingWorld, agentId: PlayerId): Meetin
     ...foxesOutOf(world),
     history: [...world.history],
     cast,
-    stakes: { awake, fairiesLeft, lastChance: fairiesLeft > 0 && awake <= fairiesLeft * 2 + 1 },
+    // 妖狐がまだ起きているかもしれない時（顔ぶれの妖狐の数から、「妖狐だった」と公表された人を引いた数。どちらも公開の情報）は、妖狐も、クビにしないといけない相手に数える。
+    stakes: stakesOf(awake, fairiesLeft, foxUp),
     meeting: {
       reason: meeting.reason,
       absent: meeting.absent.map((a) => ({ name: nameOf(world, a.id), status: a.status })),
@@ -48,6 +67,8 @@ export function buildObservation(world: MeetingWorld, agentId: PlayerId): Meetin
       })),
     },
     options: [...others, meeting.phase === 'speak' ? NO_SUSPECT : SKIP_VOTE],
+    // 話すことがなければ黙ってよい（集会の最初の発言は黙れない）。全員に同じ決まりで、本人の役職では変わらない
+    ...(meeting.phase === 'speak' && config.allowPass && meeting.transcript.length > 0 ? { mayPass: true } : {}),
     limits: { sayTargetChars: config.sayTargetChars, sayMaxChars: config.sayMaxChars },
   };
 }
@@ -74,7 +95,7 @@ export function buildCeremonyObservation(
   const after = phase !== 'greet';
   if (after && result === null) throw new Error('試合のあとの観測には、結果が要ります');
   if (!after && result !== null) throw new Error('朝礼の観測に、結果を入れてはいけません');
-  const allies = me.role === 'nibbler' ? world.players.filter((p) => p.role === 'nibbler' && p.id !== agentId).map((p) => p.name) : [];
+  const allies = alliesOf(world, me.role, agentId);
   const transcript = phase === 'diary' ? [] : spoken.map((line) => ({ round: 1, speaker: nameOf(world, line.speakerId), text: line.text }));
   return {
     kind: 'meeting',

@@ -21,7 +21,7 @@ export function effectOf(event: Cue['event'], secrets: boolean): Effect | null {
       return 'bell';
     case 'nap':
       return 'nap';
-    // 占いは、まわりの人には見えない。役職を見せている時だけ鳴らす。占われた狐が餅になる音は、どちらの時も鳴る
+    // 占いは、まわりの人には見えない。役職を見せている時だけ鳴らす。占われた妖狐が餅になる音は、どちらの時も鳴る
     case 'divine':
       return event.cursed ? (secrets ? 'curse' : 'nap') : secrets ? 'divine' : null;
     // ふりの仕込みは、役職を見せている時だけ無音にする（隠している時に、音で見分けがつかないように）
@@ -36,7 +36,7 @@ export function effectOf(event: Cue['event'], secrets: boolean): Effect | null {
     // 抜け道は、役職を見せている時だけ聞こえる（音で、床下にいることを明かさない）
     case 'sneak':
       return secrets ? 'creak' : null;
-    // 工房の道具を見る（盤と名札かけは、木の札の音。防犯カメラの画面は、画面がつく音）
+    // 工房の道具を見る（シフト表とずんだ餅ボードは、木の札の音。防犯カメラの画面は、画面がつく音）
     case 'look':
       return event.device === 'cameras' ? 'monitor' : 'peek';
     case 'vote':
@@ -116,12 +116,12 @@ export function scoreOf(show: Show, options: { secrets: boolean; from: number; t
       items.push({ at: at - from, blip: NARRATOR_BLIP * (0.94 + rand(n * 977 + k) * 0.12) });
     }
   }
-  // 餅に変える直前の差し込み（役職を見せている時だけ）。効果音と、妖精の決めぜりふ
+  // 餅に変える直前の差し込み（役職を見せている時だけ）。効果音と、人狼の決めぜりふ
   if (secrets) {
     for (const cut of show.cutins) {
       if (cut.at >= from && cut.at < to) items.push({ at: cut.at - from, effect: 'cutin' });
       if (!cut.clip) {
-        // 音声が無い時は、妖精の「しゃべり声」
+        // 音声が無い時は、人狼の「しゃべり声」
         const seat = show.log.seats.indexOf(cut.pairs[0]?.by ?? '');
         for (let at = cut.at + CUTIN_VOICE_DELAY, k = 0; at < cut.end - 0.2; at += BLIP_EVERY, k++) {
           if (at >= from && at < to) items.push({ at: at - from, blip: (300 + seat * 46) * (0.94 + rand(cut.at * 31 + k) * 0.12) });
@@ -323,7 +323,7 @@ export class Sound {
     source.stop(start + length + 0.05);
   }
 
-  /** 妖精の見せ場の差し込み（しゅばっと入って、きらーんと光る）。 */
+  /** 人狼の見せ場の差し込み（しゅばっと入って、きらーんと光る）。 */
   cutin(): void {
     this.whoosh(0, 0.32, 600, 5200, 0.55);
     for (const [freq, delay] of [[1319, 0.12], [1760, 0.17], [2637, 0.22]] as const) this.tone(freq, delay, 0.7, { type: 'triangle', gain: 0.09 });
@@ -380,7 +380,7 @@ export class Sound {
     this.tone(120, 0, 0.3, { type: 'sawtooth', gain: 0.07, slideTo: 190 });
   }
 
-  /** 見取り図の盤・名札かけを見る（木の札に、こつん、と触れる2音）。 */
+  /** シフト表・ずんだ餅ボードを見る（木の札に、こつん、と触れる2音）。 */
   peek(): void {
     this.tone(620, 0, 0.08, { type: 'triangle', gain: 0.1, attack: 0.003 });
     this.tone(830, 0.07, 0.12, { type: 'triangle', gain: 0.09, attack: 0.003 });

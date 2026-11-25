@@ -1,4 +1,4 @@
-// 広い工房・11人（ずんだの妖精2人・狐1人）の試合（仕込み、鐘、妨害、抜け道、心だけの仕込み）。
+// 広い工房・11人（人狼2人・妖狐1人）の試合（仕込み、鐘、妨害、抜け道、心だけの仕込み）。
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -15,8 +15,8 @@ const count = (log: MatchLog, type: string) => log.events.filter((e) => e.type =
 
 /**
  * プロンプトとスキーマだけを見て試合を進める頭脳。受け取った要求は全部覚えておく。
- * 従業員と妖精マニアは仕込みを進め、困りごとは直しに行き、ずんだ餅になった人を見たら知らせる。
- * 妖精（スキーマに専用の行動がある）は、見えている相手をずんだ餅に変え、ときどき妨害し、抜け道を使う。
+ * 従業員と狂信者は仕込みを進め、困りごとは直しに行き、ずんだ餅になった人を見たら知らせる。
+ * 人狼（スキーマに専用の行動がある）は、見えている相手をずんだ餅に変え、ときどき妨害し、抜け道を使う。
  */
 class BusyBrain implements Brain {
   readonly id: string;
@@ -32,7 +32,7 @@ class BusyBrain implements Brain {
     let json: unknown;
     if (props.action) {
       const actions = props.action.enum ?? [];
-      const allies = (/【仲間の妖精】(.*)/.exec(request.user)?.[1] ?? '').split('、');
+      const allies = (/【仲間の人狼】(.*)/.exec(request.user)?.[1] ?? '').split('、');
       const seen = [...(/【見えている相手】(.*)/.exec(request.user)?.[1] ?? '').matchAll(/([^、（]+)（([^）]*)）/g)].map((m) => ({ name: m[1] as string, asleep: (m[2] as string).includes('ずんだ餅になっている') }));
       const sleeper = seen.find((v) => v.asleep);
       const awake = seen.find((v) => !v.asleep && !allies.includes(v.name));
@@ -61,7 +61,7 @@ describe('広い工房・11人の試合', () => {
     expect(first).toMatchObject({ mode: 'match', status: 'finished' });
     expect(first.players.filter((p) => p.role === 'nibbler')).toHaveLength(2);
     expect(first.truth.nibbler?.split('、')).toHaveLength(2);
-    // 2026-11-18 から、妖精マニアの代わりに狐が1人
+    // 2026-11-18 から、狂信者の代わりに妖狐が1人
     expect(first.players.filter((p) => p.role === 'madman')).toHaveLength(0);
     expect(first.players.filter((p) => p.role === 'fox')).toHaveLength(1);
     expect(first.truth.fox?.split('、')).toHaveLength(1);
@@ -162,7 +162,7 @@ describe('広い工房・11人の試合', () => {
       // 勝敗の理由が、記録と合っている
       const awake = log.players.filter((p) => !asleep.has(p.name) && !home.has(p.name));
       const awakeNibblers = awake.filter((p) => p.role === 'nibbler').length;
-      // 妖精マニアと狐は人間側に数える。狐が、自分の仕込みを決まった数だけ終えて起きたまま終われば、勝ちは狐（理由は、本来の終わり方のまま）。
+      // 狂信者と妖狐は人間側に数える。妖狐が、自分の仕込みを決まった数だけ終えて起きたまま終われば、勝ちは妖狐（理由は、本来の終わり方のまま）。
       // 起きていても仕込みが足りなければ、横取りできない（foxMissed。2026-11-21 から）
       const foxAwake = awake.find((p) => p.role === 'fox');
       const foxDone = foxAwake ? log.events.filter((e) => e.type === 'task' && e.agent === foxAwake.name).length : 0;
@@ -181,8 +181,7 @@ describe('広い工房・11人の試合', () => {
       if (result.why === 'crisis') expect(result.clock - (trouble?.t ?? Infinity), label).toBeCloseTo(log.roam!.config.crisisSeconds, 5);
       expect(result.why, label).not.toBe('opened');
     }
-    // 2026-11-21 から、狐には妖精の手が効かない。台本ボットは狐を探さないので、妖精の勝ちは減り、狐の勝ちが増える（150試合で妖精12）。
-    // 台本ボットの狐は、前は「手をかざされた」を見たこととして集会で話していた。それが無くなり、従業員の勝ちが減った（150試合で従業員11・妖精33・狐106）
+    // 妖狐には人狼の杖が効かない（2026-11-21 から）。台本ボットは妖狐を探さず、横取りに仕込みの条件も無い（2026-11-23 から）ので、妖狐の勝ちが多い（150試合で従業員12・人狼15・妖狐123）。
     expect(wins.artisan, JSON.stringify(wins)).toBeGreaterThan(5);
     expect(wins.nibbler, JSON.stringify(wins)).toBeGreaterThan(5);
     expect(wins.fox, JSON.stringify(wins)).toBeGreaterThan(5);
@@ -191,7 +190,7 @@ describe('広い工房・11人の試合', () => {
   }, 180_000);
 
   for (const seed of [2, 5, 9]) {
-    it(`seed ${seed}: 従業員と狐に渡る文字列に、妖精だけの行動と状態は出ない。他人の秘密も役職も渡らない`, async () => {
+    it(`seed ${seed}: 従業員と妖狐に渡る文字列に、人狼だけの行動と状態は出ない。他人の秘密も役職も渡らない`, async () => {
       let world!: RoamWorld;
       const brains = Array.from({ length: 11 }, (_, i) => new BusyBrain(`seat-${i}`));
       const log = await runMatch({
@@ -227,27 +226,27 @@ describe('広い工房・11人の試合', () => {
           if (other !== me) expect(bytes).not.toContain(`CANARY-${other}-`);
         }
         const role = world.players[me]!.role;
-        // クビになった人については、妖精だったかどうかしか伝わらない
-        expect(bytes).not.toMatch(/（(従業員|妖精マニア|狐|ずんだの妖精)でした）/);
+        // クビになった人については、人狼だったかどうかしか伝わらない
+        expect(bytes).not.toMatch(/（(従業員|狂信者|妖狐|人狼)でした）/);
         if (role !== 'nibbler') {
-          expect(bytes).not.toContain('あなたはずんだの妖精です');
-          expect(bytes).not.toMatch(/transform|nap|sneak|sabotage|【ずんだ餅に変える力】|【妨害】|【床下の抜け道】|【仲間の妖精】/);
+          expect(bytes).not.toContain('あなたは人狼です');
+          expect(bytes).not.toMatch(/transform|nap|sneak|sabotage|【ずんだ餅に変える力】|【妨害】|【床下の抜け道】|【仲間の人狼】/);
           expect(bytes).not.toMatch(/ずんだ餅に変えた|変える機会がなかった|の戸を閉めた|あかりを消した|焚きすぎにした|抜け道を通って|閉められる部屋/);
         }
         if (role === 'artisan') {
           artisans += 1;
-          expect(bytes).not.toMatch(/のふりをし|見せかけ|あなたは妖精マニアです|あなたは狐です/);
+          expect(bytes).not.toMatch(/のふりをし|見せかけ|あなたは狂信者です|あなたは妖狐です/);
         } else if (role === 'fox') {
           foxes += 1;
-          expect(bytes).toContain('あなたは狐です');
-          // 横取りに仕込みの条件がある試合（既定）では、狐の仕込みは本物（2026-11-21 から）
-          expect(bytes).toContain('【あなたの仕込み（狐の横取りの条件のぶん。従業員みんなの進み具合には入らない）】');
-          expect(bytes).toContain('【狐の仕込みの進み】');
-          expect(bytes).not.toContain('【あなたの仕込み（ふりをするための見せかけ）】');
+          expect(bytes).toContain('あなたは妖狐です');
+          // 横取りに仕込みの条件が無い試合（2026-11-23 から既定）では、妖狐の仕込みは見せかけ。条件の話は渡さない
+          expect(bytes).toContain('【あなたの仕込み（ふりをするための見せかけ）】');
+          expect(bytes).not.toContain('【妖狐の仕込みの進み】');
+          expect(bytes).not.toContain('工程以上終えていれば');
         } else {
-          expect(bytes).not.toContain('あなたは狐です');
-          // 妖精も、誰が狐かを知らない（仲間の欄に出ない）
-          for (const line of bytes.match(/【仲間の妖精】.*/g) ?? []) {
+          expect(bytes).not.toContain('あなたは妖狐です');
+          // 人狼も、誰が妖狐かを知らない（仲間の欄に出ない）
+          for (const line of bytes.match(/【仲間の人狼】.*/g) ?? []) {
             for (const fox of foxNames) expect(line).not.toContain(fox);
             expect(fairyNames.some((fairy) => line.includes(fairy))).toBe(true);
           }

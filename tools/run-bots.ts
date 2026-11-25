@@ -1,7 +1,7 @@
 // 台本ボットだけの試合を、画面なしで回す。
 //   npm run bots -- --seed 7 --players 11 --out matches/seed-7.json
 // --out を付けると、試合の記録（JSON）を書き出す。
-// 狐・占い師・妖精マニアは、9人以上なら1人ずつ入る（--foxes 0 --seers 0 --madmen 0 で、妖精と従業員だけ）。
+// 妖狐・占い師・狂信者は、9人以上なら1人ずつ入る（--foxes 0 --seers 0 --madmen 0 で、人狼と従業員だけ）。
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -33,7 +33,7 @@ const log = await runMatch({
   denyList: [],
 });
 
-const ROLE: Record<string, string> = { artisan: '従業員', nibbler: 'ずんだの妖精', madman: '妖精マニア', fox: '狐', seer: '占い師' };
+const ROLE: Record<string, string> = { artisan: '従業員', nibbler: '人狼', madman: '狂信者', fox: '妖狐', seer: '占い師' };
 console.log(`種 ${values.seed} ／ ${log.seats.length}人`);
 for (const player of log.players) console.log(`  ${player.name}: ${ROLE[player.role] ?? player.role}`);
 console.log(describeOutcome(log));

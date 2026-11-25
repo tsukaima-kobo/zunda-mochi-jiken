@@ -32,12 +32,13 @@ export function applySpeak(world: MeetingWorld, speakerId: PlayerId, text: strin
   if (meeting.phase !== 'speak') throw new RuleViolation('not_speaking_phase', 'いまは発言の時間ではありません');
   if (meeting.queue[0] !== speakerId) throw new RuleViolation('not_your_turn', 'あなたの番ではありません');
   const say = text.trim();
-  if (say.length === 0) throw new RuleViolation('empty', '発言が空です');
+  // 黙ってよい集会でも、最初の発言（見つけて知らせた人・鐘を鳴らした人）は黙れない
+  if (say.length === 0 && (!config.allowPass || meeting.transcript.length === 0)) throw new RuleViolation('empty', '発言が空です');
   if (charCount(say) > config.sayMaxChars) {
     throw new RuleViolation('too_long', `発言は${config.sayMaxChars}字以内にしてください`);
   }
 
-  meeting.transcript.push({ round: meeting.round, speakerId, text: say });
+  if (say.length > 0) meeting.transcript.push({ round: meeting.round, speakerId, text: say });
   meeting.queue.shift();
   if (meeting.queue.length > 0) return;
 

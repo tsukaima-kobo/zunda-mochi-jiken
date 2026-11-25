@@ -143,7 +143,7 @@ describe('歩き回り', () => {
 });
 
 describe('ずんだ餅に変える', () => {
-  it('妖精は近くの相手をずんだ餅に変える。餅になった人は動かず、まわりからは「ずんだ餅になっている」と見える', () => {
+  it('人狼は近くの相手をずんだ餅に変える。餅になった人は動かず、まわりからは「ずんだ餅になっている」と見える', () => {
     const { w, nibbler, victim } = stage();
     applyRoamIntent(w, nibbler, { action: 'transform_if_unseen', target: name(w, victim) });
     run(w, 3);
@@ -221,10 +221,10 @@ describe('ずんだ餅に変える', () => {
     const { w, nibbler, victim, rest } = stage();
     const [both, onlyVictim, nobody] = rest as [PlayerId, PlayerId, PlayerId];
     actorById(w, both).pos = centerOf({ x: 17, y: 3 }); // 倉庫の中: 両方が見える
-    // 餅に変わる人だけが見える位置: 妖精は離れたまま（距離の条件を外して）遠くから変えたことにする
+    // 餅に変わる人だけが見える位置: 人狼は離れたまま（距離の条件を外して）遠くから変えたことにする
     actorById(w, nibbler).pos = centerOf({ x: 21, y: 2 });
     actorById(w, victim).pos = centerOf({ x: 16, y: 3 });
-    actorById(w, onlyVictim).pos = centerOf({ x: 11, y: 3 }); // 通路から戸口ごしに、餅に変わる人だけが見える（妖精は遠くて見えない）
+    actorById(w, onlyVictim).pos = centerOf({ x: 11, y: 3 }); // 通路から戸口ごしに、餅に変わる人だけが見える（人狼は遠くて見えない）
     w.roam.napRange = 99;
     expect(visibleTo(w, onlyVictim)).toContain(victim);
     expect(visibleTo(w, onlyVictim)).not.toContain(nibbler);
@@ -232,7 +232,7 @@ describe('ずんだ餅に変える', () => {
     run(w, 1);
     const n = name(w, nibbler);
     const v = name(w, victim);
-    expect(buildRoamObservation(w, both).events).toEqual([`倉庫 で ${n} が ${v} に手をかざし、${v} がずんだ餅に変わるのを見た`]);
+    expect(buildRoamObservation(w, both).events).toEqual([`倉庫 で ${n} が ${v} に杖をふり、${v} がずんだ餅に変わるのを見た`]);
     expect(buildRoamObservation(w, onlyVictim).events).toEqual([`倉庫 で ${v} が急にずんだ餅に変わるのを見た（そばに誰がいたかは見えなかった）`]);
     expect(buildRoamObservation(w, nobody).events).toEqual([]);
     expect(w.incidents[0]!.witnesses).toEqual(expect.arrayContaining([{ id: both, sawWho: true }, { id: onlyVictim, sawWho: false }]));
@@ -318,7 +318,7 @@ describe('発見と集会', () => {
     expect(buildObservation(w, finder).options).not.toContain(name(w, victim));
   });
 
-  it('妖精をクビにすれば、従業員の勝ち', () => {
+  it('人狼をクビにすれば、従業員の勝ち', () => {
     const { w, nibbler, victim } = stage();
     startAfterNap(w, nibbler, victim);
     hold(w, (voter) => (voter === nibbler ? 'skip' : nibbler));
@@ -338,17 +338,17 @@ describe('発見と集会', () => {
     expect(obs.away).toEqual(expect.arrayContaining([{ name: name(w, victim), status: 'asleep' }, { name: name(w, wrong), status: 'sent_home' }]));
     expect(obs.visible.map((v) => v.name)).not.toContain(name(w, victim));
     expect(obs.history).toHaveLength(1);
-    expect(obs.history[0]).toContain(`${name(w, wrong)} をクビにした（妖精ではなかった）`);
+    expect(obs.history[0]).toContain(`${name(w, wrong)} をクビにした（人狼ではなかった）`);
     expect(obs.history[0]).toContain(`ずんだ餅になった人: ${name(w, victim)}`);
-    // 誰が誰に入れたかは、投票のあとで全員に明かされる（席順）。役職の名前は残さない（妖精だったかどうかだけ）
+    // 誰が誰に入れたかは、投票のあとで全員に明かされる（席順）。役職の名前は残さない（人狼だったかどうかだけ）
     expect(obs.history[0]).toContain(`${name(w, wrong)}→スキップ`);
     expect(obs.history[0]).toContain(`${name(w, nibbler)}→${name(w, wrong)}`);
-    expect(obs.history[0]).not.toMatch(/従業員|妖精マニア|ずんだの妖精/);
+    expect((obs.history[0] ?? '').replace('（人狼ではなかった）', '')).not.toMatch(/従業員|狂信者|人狼/);
     // 見回りの初めは、また渡せるまで待つ
     expect(buildRoamObservation(w, nibbler).napCooldown).toBe(0); // この試験では待ち時間を 0 にしている
   });
 
-  it('起きている人間が1人以下になれば、妖精の勝ち（餅に変えた瞬間でも、集会のあとでも）', () => {
+  it('起きている人間が1人以下になれば、人狼の勝ち（餅に変えた瞬間でも、集会のあとでも）', () => {
     const byNap = stage(1, {}, 3);
     applyRoamIntent(byNap.w, byNap.nibbler, { action: 'transform', target: name(byNap.w, byNap.victim) });
     run(byNap.w, 1);

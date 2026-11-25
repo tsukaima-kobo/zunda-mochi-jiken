@@ -61,7 +61,7 @@ export interface AgentOptions {
 /** 目の前の出来事のうち、判断を急がせないもの。 */
 const CALM_EVENT = /あかりがついた|火が落ち着いた/;
 
-type Check<I> = { ok: true; intent: I } | { ok: false; problems: string[]; trimmed?: I };
+type Check<I> = { ok: true; intent: I } | { ok: false; problems: string[]; trimmed?: I; /** 明らかな悪手の聞き直しだけが問題の答え（聞き直しても同じなら、これを通す）。 */ soft?: I };
 
 interface Question<I> {
   user(feedback?: string): string;
@@ -83,9 +83,9 @@ export class Agent {
   private startled = false;
   /** そばで誰かが話した（まだそれに返事をする判断をしていない）。 */
   private spokenTo = false;
-  /** 妖精の力（手をかざす力・妨害）が、いま使えるようになった（まだそれを踏まえた判断をしていない）。 */
+  /** 人狼の力（杖の力・妨害）が、いま使えるようになった（まだそれを踏まえた判断をしていない）。 */
   private powerReady = false;
-  /** 前の観測での、手をかざす力と妨害の残り秒数（使えるようになった瞬間を見つけるため） */
+  /** 前の観測での、杖の力と妨害の残り秒数（使えるようになった瞬間を見つけるため） */
   private powerWait: { nap: number | null; sabotage: number | null } = { nap: null, sabotage: null };
 
   constructor(options: AgentOptions) {
@@ -111,7 +111,7 @@ export class Agent {
     // 困りごとが片づいた知らせでは、決め直さない（直していた本人は、行動が終わるので決め直す）
     const stirring = obs.events.some((event) => !CALM_EVENT.test(event));
     if (stirring || obs.lastResult?.includes('をずんだ餅に変えた')) this.startled = true;
-    // 2026-11-21 夜 頭脳のある妖精は、手をかざす力か妨害が使えるようになった瞬間に決め直す（本人の待ち時間だけで決まるので、秘密は漏れない）。
+    // 2026-11-21 夜 頭脳のある人狼は、杖の力か妨害が使えるようになった瞬間に決め直す（本人の待ち時間だけで決まるので、秘密は漏れない）。
     // 最大15秒おきに呼ぶだけだと、妨害で鐘を止める前に鐘を鳴らされることがあった。台本ボットは前と同じ（ボットの試合の結果を変えない）
     const nap = obs.napCooldown;
     const sabotage = obs.sabotage && !obs.trouble ? obs.sabotage.waitSeconds : null;
@@ -157,7 +157,7 @@ export class Agent {
           const trimmed = verdict.trimmable
             ? ({ kind: 'speak', ...verdict.trimmable, say: trimSay(verdict.trimmable.say, obs.limits.sayMaxChars) } as const)
             : undefined;
-          return { ok: false, problems: verdict.problems, trimmed };
+          return { ok: false, problems: verdict.problems, trimmed, ...(verdict.keep ? { soft: verdict.keep } : {}) };
         },
         feedback: (problems) => feedbackFor(problems, obs),
         fallback: () => scriptedIntent(obs, seed, [...memory.past, ...memory.recent]),
@@ -205,6 +205,8 @@ export class Agent {
 
     let feedback: string | undefined;
     let trimmed: I | undefined;
+    // 明らかな悪手の聞き直しだけが問題だった答え。聞き直しても同じなら、これを通す（試合を止めない・台本の代わりに落とさない）
+    let kept: I | undefined;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const request: BrainRequest = { system: RULES, user: question.user(feedback), schema: question.schema };
       hooks.onRequest?.(attempt, brain.id, request);
@@ -234,11 +236,13 @@ export class Agent {
 
       if (verdict?.ok) return { intent: verdict.intent, source: attempt === 1 ? 'brain' : 'retry', attempts };
       if (verdict && !verdict.ok && verdict.trimmed !== undefined) trimmed = verdict.trimmed;
+      if (verdict && !verdict.ok && verdict.soft !== undefined) kept = verdict.soft;
       feedback = verdict ? question.feedback(problems) : undefined;
     }
 
     // 長すぎること以外に問題がなかった発言は、切って使う
     if (trimmed !== undefined) return { intent: trimmed, source: 'trimmed', attempts };
+    if (kept !== undefined) return { intent: kept, source: attempts.length === 1 ? 'brain' : 'retry', attempts };
     return { intent: question.fallback(), source: 'fallback', attempts };
   }
 }

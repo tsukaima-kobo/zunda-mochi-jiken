@@ -22,7 +22,7 @@ export interface PlayerTruth {
   facts: string[];
   /** 占い師だけ: これまでに占った結果（古い順）。本人の観測にだけ入る。 */
   divined?: Divined[];
-  /** 狐だけ（横取りに仕込みの条件がある試合）: 自分の仕込みの進み。本人の観測にだけ入る。 */
+  /** 妖狐だけ（横取りに仕込みの条件がある試合）: 自分の仕込みの進み。本人の観測にだけ入る。 */
   foxWork?: { done: number; need: number };
 }
 
@@ -68,12 +68,18 @@ export interface MeetingConfig {
   maxRounds: number;
   sayTargetChars: number;
   sayMaxChars: number;
+  /**
+   * 集会で、話すことがなければ黙ってよいか（集会の最初の発言は黙れない）。黙った番は、発言の記録に残らない。
+   * 全員が順に話すと、関係のない発言や、当人同士の会話への横入りで、テンポが悪くなるため。前の版の記録には無い（黙れなかった）。
+   */
+  allowPass?: boolean;
 }
 
 export const DEFAULT_MEETING_CONFIG: MeetingConfig = {
   maxRounds: 2,
   sayTargetChars: 60,
   sayMaxChars: 80,
+  allowPass: true,
 };
 
 export interface World {
@@ -115,10 +121,19 @@ export function playerById(world: Pick<World, 'players'>, id: PlayerId): PlayerT
   return player;
 }
 
+/**
+ * 本人が知っている、同じ陣営の相手の名前。人狼どうしは互いを知る。
+ * 狂信者は、誰が人狼かを知っている（2026-11-22 夜から。前は誰も知らなかった）。人狼は、誰が狂信者かを知らない。
+ */
+export function alliesOf(world: { players: readonly { id: PlayerId; name: string; role: Role }[] }, role: Role, self: PlayerId): string[] {
+  if (role !== 'nibbler' && role !== 'madman') return [];
+  return world.players.filter((p) => p.role === 'nibbler' && p.id !== self).map((p) => p.name);
+}
+
 /** この試合の顔ぶれ（役職ごとの人数）。全員に公開する。誰がどの役職かは入らない。 */
 export function castOf(world: Pick<World, 'players'> & { roam?: { foxSteps?: number; divineSeconds?: number } }): CastCounts & { foxes: number; seers: number } {
   const foxes = world.players.filter((p) => p.role === 'fox').length;
-  // 狐の横取りの条件（自分の仕込みの工程の数）も、全員が知っている決まり（2026-11-21 から）
+  // 妖狐の横取りの条件（自分の仕込みの工程の数）も、全員が知っている決まり（2026-11-21 から）
   const foxSteps = foxes > 0 ? (world.roam?.foxSteps ?? 0) : 0;
   const seers = world.players.filter((p) => p.role === 'seer').length;
   // 占うのに相手のそばにいる秒数も、全員が知っている決まり（2026-11-21 夜から）
@@ -148,7 +163,7 @@ export function clockText(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
 
-/** クビになって「狐だった」と全員に知らされた狐の人数（1人以上の時だけ入れる。観測の foxesOut）。 */
+/** クビになって「妖狐だった」と全員に知らされた妖狐の人数（1人以上の時だけ入れる。観測の foxesOut）。 */
 export function foxesOutOf(world: { players: readonly PlayerTruth[] }): { foxesOut?: number } {
   const n = world.players.filter((p) => p.role === 'fox' && p.status === 'sent_home').length;
   return n > 0 ? { foxesOut: n } : {};

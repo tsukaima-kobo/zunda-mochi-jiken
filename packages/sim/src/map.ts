@@ -73,7 +73,7 @@ export interface Hatch {
   group: string;
 }
 
-/** 工房の道具の種類。admin: 見取り図の盤（部屋ごとの人数） / vitals: 名札かけ（全員が起きているか） / cameras: 防犯カメラの画面。 */
+/** 工房の道具の種類。admin: シフト表（部屋ごとの人数） / vitals: ずんだ餅ボード（全員が起きているか） / cameras: 防犯カメラの画面。 */
 export type DeviceKind = 'admin' | 'vitals' | 'cameras';
 export const DEVICE_KINDS: readonly DeviceKind[] = ['admin', 'vitals', 'cameras'];
 
@@ -125,7 +125,7 @@ export interface MapDefinition {
   doors?: Rect[];
   /** 戸を閉められる部屋の名前。 */
   closable?: string[];
-  /** 工房の道具（見取り図の盤・名札かけ・防犯カメラ）。 */
+  /** 工房の道具（シフト表・ずんだ餅ボード・防犯カメラ）。 */
   devices?: MapDevices;
   decor?: MapDecor;
 }

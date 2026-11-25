@@ -243,7 +243,7 @@ export function buildWorkshop(map: MapDefinition, tile: number): Workshop {
       return !used.some(([a, b]) => k0 < b && k1 > a);
     };
 
-    // 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）は、道具の升目のすぐ奥の壁にかける。名札や飾りは、よけて置く
+    // 工房の道具（シフト表・ずんだ餅ボード・防犯カメラの画面）は、道具の升目のすぐ奥の壁にかける。名札や飾りは、よけて置く
     for (const kind of ['admin', 'vitals', 'cameras'] as const) {
       const spot = deviceSpot(map.devices, kind, tile);
       if (!spot || spot.wallY !== wallY || spot.x < room.x || spot.x >= room.x + room.w) continue;

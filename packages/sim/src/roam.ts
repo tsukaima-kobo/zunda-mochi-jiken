@@ -4,20 +4,20 @@
 //
 // この作品での出来事:
 // - 従業員は、工房のあちこちの持ち場を回って、自分の仕込みを進める。全員の仕込みが終われば従業員の勝ち。
-// - 従業員にまぎれた「ずんだの妖精」は、人をずんだ餅に変えてしまう。乱暴なことは起きない。
+// - 従業員にまぎれた「人狼」は、人をずんだ餅に変えてしまう。乱暴なことは起きない。
 //   仕込みはふりだけ。床下の抜け道を通れる。あかりを消す、かまどを焚きすぎる、戸を閉める、の妨害ができる。
-// - 「妖精マニア」は、妖精の味方をする人間（人狼の狂人）。誰が妖精かは知らず、妖精も知らない。
-//   仕込みはふりだけで、特別な行動は無い。頭数は人間側に数える。妖精が勝てば勝ち。
+// - 「狂信者」は、人狼の味方をする人間。誰が人狼かを知っている。人狼は、誰が狂信者かを知らない。
+//   仕込みはふりだけで、特別な行動は無い。頭数は人間側に数える。人狼が勝てば勝ち。
 // - ずんだ餅になった人を見つけた人は知らせて、集会を開ける。中庭の鐘を鳴らして、みんなを集めることもできる。
-// - 「狐」は、ひとりだけの陣営。自分の仕込みを決まった数（foxSteps）だけ終えたうえで、試合が終わった時に起きていれば、勝ちを横取りする。
-//   妖精に餅にされるし、占い師に占われても餅になる。狐の仕込みは、従業員の進み具合には入らない。
-// - 「占い師」は、従業員側の人間。見回り1回につき1人、そばにいる相手を占って、妖精かどうかを知る（周りからは分からない）。
-// - 工房の道具は誰でも使える: 見取り図の盤（部屋ごとの、いまの人数）・名札かけ（誰がずんだ餅になったか）・
+// - 「妖狐」は、ひとりだけの陣営。試合が終わった時に起きていれば、勝ちを横取りする（条件として、自分の仕込みを決まった数（foxSteps）だけ終えていること、を足すこともできる。既定は条件なし）。
+//   人狼の杖は効かないが、占い師に占われると餅になる。妖狐の仕込みは、従業員の進み具合には入らない。
+// - 「占い師」は、従業員側の人間。見回り1回につき1人、そばにいる相手を占って、人狼かどうかを知る（周りからは分からない）。
+// - 工房の道具は誰でも使える: シフト表（部屋ごとの、いまの人数）・ずんだ餅ボード（誰がずんだ餅になったか）・
 //   防犯カメラの画面（廊下のカメラに映っている人。見ている間は、カメラの赤いランプがつく）。
-// - 集会の投票で選ばれた人は、工房からクビにする。全員に分かるのは、その人が妖精だったかどうかだけ。
+// - 集会の投票で選ばれた人は、工房からクビにする。全員に分かるのは、その人が人狼だったかどうかだけ。
 // - ずんだ餅になった従業員は、心だけになって自分の仕込みを続ける（起きている人には見えない）。
-// - 起きている人間（従業員と妖精マニア）が、妖精の人数以下になれば、妖精の勝ち。
-//   かまどの焚きすぎを時間内に直せなかった時と、開店の時刻までに仕込みが終わらなかった時も、妖精の勝ち。
+// - 起きている人間（従業員と狂信者）が、人狼の人数以下になれば、人狼の勝ち。
+//   かまどの焚きすぎを時間内に直せなかった時と、開店の時刻までに仕込みが終わらなかった時も、人狼の勝ち。
 // （内部の名前 nibbler・nap・asleep は、前の題材「つまみ食い犯・おひるね」のなごり。記録の互換のために残している）
 
 import { bondsOf, CAST, NO_TARGET, ROAM_SAY_MAX_CHARS, SABOTAGE_CRISIS, SABOTAGE_LIGHTS } from '../../protocol/src/index.ts';
@@ -25,7 +25,7 @@ import type { CastMember, Divined, Role, RoamObservation, Side } from '../../pro
 import { areaAt, centerOf, findRoute, findRouteThroughDoors, hasLineOfSight, isWalkable, parseMap, tileOf } from './map.ts';
 import type { CameraPoint, DeviceDefinition, DeviceKind, DutyDefinition, FixPoint, GameMap, Hatch, MapDefinition, Point, Station } from './map.ts';
 import { createRng } from './rng.ts';
-import { castOf, clockText, DEFAULT_MEETING_CONFIG, foxesOutOf, nameOf, playerById, RuleViolation } from './world.ts';
+import { alliesOf, castOf, clockText, DEFAULT_MEETING_CONFIG, foxesOutOf, nameOf, playerById, RuleViolation } from './world.ts';
 import type { Ballot, MeetingConfig, MeetingWorld, PlayerId, PlayerTruth } from './world.ts';
 
 // 登場人物は packages/protocol/src/cast.ts。人柄は名前に付いている。
@@ -40,8 +40,8 @@ export interface RoamConfig {
   /** 開店までの時間（歩き回る時間の合計、秒）。集会の間は進まない。deadline が 0 の時は、試合が止まらないための上限（ふつうは届かない長さにする）。 */
   roamSeconds: number;
   /**
-   * 1: 開店の時刻（制限時間）がある。仕込みが終わらないまま来たら妖精の勝ち。
-   * 0: 制限時間は無い（工房のマップは 0）。画面・説明・頭脳への指示から時刻の話を外す。
+   * 1: 開店の時刻（制限時間）がある。仕込みが終わらないまま来たら人狼の勝ち。
+   * 0: 制限時間は無い（手本のゲームと同じ。2026-11-19 から工房のマップは 0）。画面・説明・頭脳への指示から時刻の話を外す。
    */
   deadline: number;
   tickSeconds: number;
@@ -59,17 +59,17 @@ export interface RoamConfig {
   napRange: number;
   /**
    * ずんだ餅になった人を知らせられる距離（タイル）。餅のすぐそばまで近づかないと、知らせられない。
-   * （前は、見えていれば、どれだけ離れていても知らせられた。1.5 は、手をかざす距離・占う距離と同じにした、わたしの決めた値）
+   * （前は、見えていれば、どれだけ離れていても知らせられた。1.5 は、杖をふる距離・占う距離と同じにした、わたしの決めた値）
    */
   reportRange: number;
-  /** 妖精の人数。0 なら人数から決める（9人以上で2人）。 */
+  /** 人狼の人数。0 なら人数から決める（9人以上で2人）。 */
   nibblers: number;
-  /** 妖精マニアの人数。-1 なら人数から決める（いまは 0。狐に置きかえた）。 */
+  /** 狂信者の人数。-1 なら人数から決める（いまは 0。妖狐に置きかえた）。 */
   madmen: number;
-  /** 狐の人数。-1 なら人数から決める（11人以上で1人）。 */
+  /** 妖狐の人数。-1 なら人数から決める（11人以上で1人）。 */
   foxes: number;
   /**
-   * 狐が勝ちを横取りするために、終えておく自分の仕込みの工程の数。0 なら条件なし（起きていれば横取り）。
+   * 妖狐が勝ちを横取りするために、終えておく自分の仕込みの工程の数。0 なら条件なし（起きていれば横取り）。
    */
   foxSteps: number;
   /** 占い師の人数（0 なら、いない）。 */
@@ -97,7 +97,7 @@ export interface RoamConfig {
   lightsVision: number;
   /** あかりを直すのにかかる秒数。 */
   fixSeconds: number;
-  /** かまどの焚きすぎを直せるまでの猶予（秒）。過ぎると、妖精の勝ち。 */
+  /** かまどの焚きすぎを直せるまでの猶予（秒）。過ぎると、人狼の勝ち。 */
   crisisSeconds: number;
   /** 戸が閉まっている秒数と、次に戸を閉められるまでの秒数。 */
   doorSeconds: number;
@@ -108,7 +108,7 @@ export interface RoamConfig {
   hearRadius: number;
   /** 1人が話してから、次に話せるまでの秒数。 */
   chatGap: number;
-  /** 見取り図の盤・名札かけを見るのにかかる秒数。 */
+  /** シフト表・ずんだ餅ボードを見るのにかかる秒数。 */
   lookSeconds: number;
   /** 防犯カメラの画面を、1回で見続ける秒数。 */
   cameraSeconds: number;
@@ -129,7 +129,8 @@ export const DEFAULT_ROAM_CONFIG: RoamConfig = {
   nibblers: 0,
   madmen: -1,
   foxes: -1,
-  foxSteps: 7,
+  // 0 = 仕込みの条件なし（最後まで起きていれば横取り）。7 などにすると、自分の仕込みをその数だけ終えていないと横取りできない
+  foxSteps: 0,
   seers: 0,
   divineRange: 1.5,
   divineSeconds: 10,
@@ -207,9 +208,9 @@ export interface Spirit {
 export interface Actor {
   id: PlayerId;
   nibbler: boolean;
-  /** 妖精マニア。仕込みはふりだけで、特別な行動は無い。 */
+  /** 狂信者。仕込みはふりだけで、特別な行動は無い。 */
   madman: boolean;
-  /** 狐。仕込みはふりだけで、特別な行動は無い。 */
+  /** 妖狐。仕込みはふりだけで、特別な行動は無い。 */
   fox: boolean;
   /** 占い師。従業員と同じに仕込みを進め、見回り1回につき1人を占える。 */
   seer: boolean;
@@ -231,7 +232,7 @@ export interface Actor {
   heard: { speaker: string; text: string; where: string | null }[];
   /** 次に話せる時刻。 */
   chatReadyAt: number;
-  /** 自分の仕込み。妖精と妖精マニアのものは、ふりをするための見せかけ。 */
+  /** 自分の仕込み。人狼と狂信者のものは、ふりをするための見せかけ。 */
   duties: Duty[];
   bellUsesLeft: number;
   spirit: Spirit | null;
@@ -252,7 +253,7 @@ export interface Incident {
 export type Happening =
   /**
    * 仕込みの手順が1つ終わった。pretend はふりだけ（進み具合は増えない）。spirit は心だけの姿。
-   * fox は、狐の分だけ: 狐自身の仕込みの進み（done 工程 / 横取りに要る need 工程）。狐の仕込みも、従業員の進み具合は増やさない（pretend は true のまま）。
+   * fox は、妖狐の分だけ: 妖狐自身の仕込みの進み（done 工程 / 横取りに要る need 工程）。妖狐の仕込みも、従業員の進み具合は増やさない（pretend は true のまま）。
    */
   | { type: 'task'; t: number; id: PlayerId; duty: string; what: string; station: string; pretend: boolean; spirit: boolean; done: number; total: number; fox?: { done: number; need: number } }
   | { type: 'sabotage'; t: number; id: PlayerId; what: 'lights' | 'crisis' | 'door'; room: string | null; seconds: number | null }
@@ -278,23 +279,23 @@ export type Happening =
   /** 近くの人にだけ聞こえる声で話した。heard は聞こえた人（話した本人は入らない）。 */
   | { type: 'chat'; t: number; id: PlayerId; text: string; heard: PlayerId[] }
   /**
-   * 占い師が占った。fairy: 妖精だった。cursed: 占われた狐が、その場でずんだ餅に変わった
+   * 占い師が占った。fairy: 人狼だった。cursed: 占われた妖狐が、その場でずんだ餅に変わった
    * （witnesses は、餅に変わるところを見た人。camera は、防犯カメラの画面で見ていた時の、カメラの場所）。
    */
   | { type: 'divine'; t: number; id: PlayerId; targetId: PlayerId; room: string; fairy: boolean; cursed: boolean; witnesses: { id: PlayerId; camera?: string }[] }
-  /** 妖精が狐に手をかざしたが、狐はずんだ餅にならなかった（狐には妖精の手が効かない。2026-11-21 から）。witnesses は、手をかざすところまで見えた人。 */
+  /** 人狼が妖狐に杖をふったが、妖狐はずんだ餅にならなかった（妖狐には人狼の杖が効かない。2026-11-21 から）。witnesses は、杖をふるところまで見えた人。 */
   | { type: 'nap_failed'; t: number; id: PlayerId; targetId: PlayerId; room: string; witnesses: { id: PlayerId; camera?: string }[] };
 
 export type Trouble = { kind: 'lights' } | { kind: 'crisis'; deadline: number; held: Record<string, PlayerId | null> };
 
 export type GameResult = {
-  /** 勝った側。狐が、自分の仕込みを決まった数だけ終えて、起きたまま試合が終わると、狐（stolenFrom は、本来なら勝っていた側）。 */
+  /** 勝った側。妖狐が、自分の仕込みを決まった数だけ終えて、起きたまま試合が終わると、妖狐（stolenFrom は、本来なら勝っていた側）。 */
   winner: Side;
   stolenFrom?: Side;
-  /** 狐が起きたまま試合が終わったが、自分の仕込みが足りず、横取りできなかった（done 工程 / 要るのは need 工程）。 */
+  /** 妖狐が起きたまま試合が終わったが、自分の仕込みが足りず、横取りできなかった（done 工程 / 要るのは need 工程）。 */
   foxMissed?: { done: number; need: number };
   /**
-   * nibbler_sent_home: 妖精が全員クビになった / tasks_done: 仕込みがぜんぶ終わった / opened: 開店の時刻まで守りきった（仕込みの無いマップ）
+   * nibbler_sent_home: 人狼が全員クビになった / tasks_done: 仕込みがぜんぶ終わった / opened: 開店の時刻まで守りきった（仕込みの無いマップ）
    * outnumbered: 起きている人間が足りなくなった / crisis: かまどの焚きすぎを直せなかった / late: 開店の時刻までに仕込みが終わらなかった
    */
   why: 'nibbler_sent_home' | 'tasks_done' | 'opened' | 'outnumbered' | 'crisis' | 'late';
@@ -312,7 +313,7 @@ export interface RoamWorld extends MeetingWorld {
   round: number;
   stage: 'roam' | 'meeting' | 'over';
   actors: Actor[];
-  /** 妖精ごとの、次に人をずんだ餅に変えられる時刻。 */
+  /** 人狼ごとの、次に人をずんだ餅に変えられる時刻。 */
   napReadyAt: Record<PlayerId, number>;
   /** 従業員の仕込みの手順の、終わった数と全部の数。 */
   taskDone: number;
@@ -342,16 +343,16 @@ export interface RoamWorldOptions {
   config?: Partial<MeetingConfig>;
 }
 
-/** この人数から、妖精マニアを1人入れる（人数で決める時）。2026-11-18 から狐に置きかえたので、人数では入れない。 */
+/** この人数から、狂信者を1人入れる（人数で決める時）。2026-11-18 から妖狐に置きかえたので、人数では入れない。 */
 export const MADMAN_FROM = Infinity;
-/** この人数から、狐を1人入れる（人数で決める時）。 */
+/** この人数から、妖狐を1人入れる（人数で決める時）。 */
 export const FOX_FROM = 11;
 
 /**
- * クビになった人について、全員に公表する文。妖精だったかどうか。狐は、狐だったと分かる
+ * クビになった人について、全員に公表する文。人狼だったかどうか。妖狐は、妖狐だったと分かる
  */
 function ejectedVerdict(role: Role): string {
-  return role === 'nibbler' ? '妖精だった' : role === 'fox' ? '狐だった' : '妖精ではなかった';
+  return role === 'nibbler' ? '人狼だった' : role === 'fox' ? '妖狐だった' : '人狼ではなかった';
 }
 
 export function createRoamWorld(options: RoamWorldOptions): RoamWorld {
@@ -372,14 +373,14 @@ export function createRoamWorld(options: RoamWorldOptions): RoamWorld {
   const names = cast.map((member) => member.name);
   rng.shuffle(slots); // 前は、ここで人柄を並べ替えていた（乱数の使い方を変えないため、残してある）
   const ids: PlayerId[] = names.map((_, i) => `p${i + 1}`);
-  // 8人までは1人（2人にすると、台本ボットの試合で、妖精が8割以上勝った）
+  // 8人までは1人（2人にすると、台本ボットの試合で、人狼が8割以上勝った）
   const wanted = roam.nibblers > 0 ? roam.nibblers : count >= 9 ? 2 : 1;
   const nibblerCount = Math.max(1, Math.min(wanted, Math.floor((count - 1) / 2)));
   const nibblerIds = nibblerCount === 1 ? [rng.pick(ids)] : rng.shuffle(ids).slice(0, nibblerCount);
-  // 妖精マニアは、ほかの割り当てを変えないよう、別の乱数で選ぶ
+  // 狂信者は、ほかの割り当てを変えないよう、別の乱数で選ぶ
   const madmanCount = Math.max(0, Math.min(roam.madmen >= 0 ? roam.madmen : count >= MADMAN_FROM ? 1 : 0, count - nibblerCount - 2));
   const madmanIds = createRng(options.seed * 131 + 17).shuffle(ids.filter((id) => !nibblerIds.includes(id))).slice(0, madmanCount);
-  // 狐も、別の乱数で選ぶ（妖精マニアを選んだ時と、同じ人が選ばれやすいように、同じ乱数を使う）
+  // 妖狐も、別の乱数で選ぶ（狂信者を選んだ時と、同じ人が選ばれやすいように、同じ乱数を使う）
   const foxCount = Math.max(0, Math.min(roam.foxes >= 0 ? roam.foxes : count >= FOX_FROM ? 1 : 0, count - nibblerCount - madmanCount - 2));
   const foxIds = createRng(options.seed * 131 + 17).shuffle(ids.filter((id) => !nibblerIds.includes(id) && !madmanIds.includes(id))).slice(0, foxCount);
   // 占い師も、ほかの割り当てを変えないよう、別の乱数で選ぶ（従業員の中から）
@@ -404,7 +405,7 @@ export function createRoamWorld(options: RoamWorldOptions): RoamWorld {
   const roster = rng.shuffle(ids);
   const spawns = rng.shuffle(map.def.spawn);
 
-  // 仕込みの割り当て。妖精と妖精マニアにも同じ形のものを配る（ふりをするため）
+  // 仕込みの割り当て。人狼と狂信者にも同じ形のものを配る（ふりをするため）
   const dutyRng = createRng(options.seed * 31 + 7);
   const defs = map.def.duties ?? [];
   const stations = new Map((map.def.stations ?? []).map((station) => [station.id, station]));
@@ -505,7 +506,7 @@ export function createRoamWorld(options: RoamWorldOptions): RoamWorld {
   // 最初に見える仕込み: 名簿の順に1つずつ、dutiesShown 回まわして出す（先に出した人の仕込みと、なるべく重ならないように）
   if (roam.dutiesShown > 0) for (let k = 0; k < roam.dutiesShown; k++) for (const actor of actors) revealDuty(actors, actor);
 
-  // 狐の横取りの条件（自分の仕込みの工程の数）。本人の観測にだけ、進みが入る（2026-11-21 から）
+  // 妖狐の横取りの条件（自分の仕込みの工程の数）。本人の観測にだけ、進みが入る（2026-11-21 から）
   if (roam.foxSteps > 0) {
     for (const actor of actors) {
       if (!actor.fox) continue;
@@ -635,7 +636,7 @@ function lookingAt(world: RoamWorld, actor: Actor): string | null {
   return task?.kind === 'look' && task.until !== null ? (deviceOf(world, task.device)?.name ?? null) : null;
 }
 
-/** 見取り図の盤: 部屋ごとの、いまの人数（ずんだ餅になった人も数える。廊下と、床下の抜け道の中は出ない）。 */
+/** シフト表: 部屋ごとの、いまの人数（ずんだ餅になった人も数える。廊下と、床下の抜け道の中は出ない）。 */
 function adminCounts(world: RoamWorld): Record<string, number> {
   const counts: Record<string, number> = Object.fromEntries(Object.values(world.map.def.rooms).map((room) => [room, 0]));
   for (const other of world.actors) {
@@ -646,7 +647,7 @@ function adminCounts(world: RoamWorld): Record<string, number> {
   return counts;
 }
 
-/** 名札かけ: 全員の名札（起きている・ずんだ餅になった・クビ）。名簿順。 */
+/** ずんだ餅ボード: 全員の名札（起きている・ずんだ餅になった・クビ）。名簿順。 */
 function vitalsTags(world: RoamWorld): { id: PlayerId; status: 'awake' | 'asleep' | 'sent_home' }[] {
   return world.roster.map((id) => {
     const status = playerById(world, id).status;
@@ -662,7 +663,7 @@ function joinNames(world: RoamWorld, ids: readonly PlayerId[]): string {
 function lookReading(world: RoamWorld, device: DeviceDefinition, kind: DeviceKind, task: Extract<Task, { kind: 'look' }>): string {
   if (kind === 'admin') {
     const counts = Object.entries(adminCounts(world)).filter(([, n]) => n > 0);
-    return `${device.room}の「${device.name}」を見た: ${counts.map(([room, n]) => `${room} ${n}人`).join('、')}（ほかの部屋は0人。廊下にいる人は盤に出ない。誰なのかは出ない）`;
+    return `${device.room}の「${device.name}」を見た: ${counts.map(([room, n]) => `${room} ${n}人`).join('、')}（ほかの部屋は0人。廊下にいる人はシフト表に出ない。誰なのかは出ない）`;
   }
   if (kind === 'vitals') {
     const tags = vitalsTags(world);
@@ -873,14 +874,14 @@ export function isWorking(actor: Actor): boolean {
   return (task?.kind === 'duty' || task?.kind === 'fix') && task.workLeft !== null;
 }
 
-/** 従業員だけが、本当に仕込みを進める（妖精・妖精マニア・狐は、ふりだけ）。 */
+/** 従業員だけが、本当に仕込みを進める（人狼・狂信者・妖狐は、ふりだけ）。 */
 export function realWork(actor: Actor): boolean {
   return !actor.nibbler && !actor.madman && !actor.fox;
 }
 
 /**
- * 狐の、自分の仕込みの進み。done: 終えた工程 / need: 横取りに要る工程（決まりの数。自分に配られた工程より多くはしない。0 なら条件なし）。
- * 狐の仕込みは、従業員の進み具合には入らない。
+ * 妖狐の、自分の仕込みの進み。done: 終えた工程 / need: 横取りに要る工程（決まりの数。自分に配られた工程より多くはしない。0 なら条件なし）。
+ * 妖狐の仕込みは、従業員の進み具合には入らない。
  */
 export function foxWork(world: RoamWorld, actor: Actor): { done: number; need: number } {
   const steps = actor.duties.flatMap((duty) => duty.steps);
@@ -919,7 +920,7 @@ function completeStep(world: RoamWorld, actor: Actor, at: [number, number], spir
   });
 }
 
-/** 起きている人間（従業員・妖精マニア・狐）が、起きている妖精の人数以下になったら、妖精の勝ち。 */
+/** 起きている人間（従業員・狂信者・妖狐）が、起きている人狼の人数以下になったら、人狼の勝ち。 */
 function decideWinner(world: RoamWorld): GameResult | null {
   const awake = world.players.filter((p) => p.status === 'awake');
   const nibblers = awake.filter((p) => p.role === 'nibbler').length;
@@ -931,7 +932,7 @@ function decideWinner(world: RoamWorld): GameResult | null {
 }
 
 function finish(world: RoamWorld, result: GameResult): void {
-  // 狐が、自分の仕込みを決まった数だけ終えて、起きたまま試合が終われば、どちらが勝っても、狐が勝ちを横取りする。
+  // 妖狐が、自分の仕込みを決まった数だけ終えて、起きたまま試合が終われば、どちらが勝っても、妖狐が勝ちを横取りする。
   // 起きていても仕込みが足りなければ、横取りできない（結果に foxMissed を残す。観戦者と記録のため）
   const foxes = world.players.filter((p) => p.role === 'fox' && p.status === 'awake').map((p) => foxWork(world, actorById(world, p.id)));
   const ready = foxes.some((work) => work.done >= work.need);
@@ -963,7 +964,7 @@ function giveNapMochi(world: RoamWorld, actor: Actor, target: Actor): void {
     witnesses.push({ id, sawWho });
     watcher.events.push(
       sawWho
-        ? `${room} で ${byName} が ${targetName} に手をかざし、${targetName} がずんだ餅に変わるのを見た`
+        ? `${room} で ${byName} が ${targetName} に杖をふり、${targetName} がずんだ餅に変わるのを見た`
         : `${room} で ${targetName} が急にずんだ餅に変わるのを見た（そばに誰がいたかは見えなかった）`,
     );
   }
@@ -977,7 +978,7 @@ function giveNapMochi(world: RoamWorld, actor: Actor, target: Actor): void {
     witnesses.push({ id, sawWho, camera: camera.name });
     watcher.events.push(
       sawWho
-        ? `防犯カメラ（${camera.name}）に、${byName} が ${targetName} に手をかざし、${targetName} がずんだ餅に変わるのが映った`
+        ? `防犯カメラ（${camera.name}）に、${byName} が ${targetName} に杖をふり、${targetName} がずんだ餅に変わるのが映った`
         : `防犯カメラ（${camera.name}）に、${targetName} が急にずんだ餅に変わるのが映った（誰がそばにいたかは映っていなかった）`,
     );
   }
@@ -993,27 +994,27 @@ function giveNapMochi(world: RoamWorld, actor: Actor, target: Actor): void {
 }
 
 /**
- * 妖精が狐に手をかざしたが、狐はずんだ餅にならない（狐には妖精の手が効かない）。妖精の力は使ったことになる（次に使えるまで待つ）。
- * 手をかざした妖精は、相手が狐だと分かる。狐は、手をかざされたことに気づかない（何も伝えない。普通の人狼の狐と同じ）。
- * 手をかざすところまで見えた人には、妖精と狐の両方が伝わる（これは残している）。
+ * 人狼が妖狐に杖をふったが、妖狐はずんだ餅にならない（妖狐には人狼の杖が効かない）。人狼の力は使ったことになる（次に使えるまで待つ）。
+ * 杖をふった人狼は、相手が妖狐だと分かる。妖狐は、杖をふられたことに気づかない（何も伝えない）。
+ * 杖をふるところまで見えた人には、人狼と妖狐の両方が伝わる（これは残している）。
  */
 function failNap(world: RoamWorld, actor: Actor, target: Actor): void {
   const byName = nameOf(world, actor.id);
   const targetName = nameOf(world, target.id);
   const room = areaAt(world.map, target.pos);
-  // そばで見ていた人にも、防犯カメラで見ていた人にも、何も伝えない（狐にも伝えない）。分かるのは、手をかざした妖精だけ。
-  // （前は、わたしが決めた作りで、見ていた人に「妖精と狐の両方が分かる」と伝えていた。前の記録の witnesses は、その時のもの）
+  // そばで見ていた人にも、防犯カメラで見ていた人にも、何も伝えない（妖狐にも伝えない）。分かるのは、杖をふった人狼だけ。
+  // （前は、わたしが決めた作りで、見ていた人に「人狼と妖狐の両方が分かる」と伝えていた。前の記録の witnesses は、その時のもの）
   const witnesses: { id: PlayerId; camera?: string }[] = [];
-  stop(actor, `${targetName} に手をかざしたが、ずんだ餅にならなかった。${targetName} は狐だ（狐には、妖精の手は効かない。${targetName} は、手をかざされたことに気づいていない）`);
+  stop(actor, `${targetName} に杖をふったが、ずんだ餅にならなかった。${targetName} は妖狐だ（妖狐には、人狼の杖は効かない。${targetName} は、杖をふられたことに気づいていない）`);
   world.napReadyAt[actor.id] = world.clock + world.roam.napCooldown;
   world.happenings.push({ type: 'nap_failed', t: world.clock, id: actor.id, targetId: target.id, room, witnesses });
 }
 
 /**
- * 占い師が占う。分かるのは、相手が妖精かどうかだけ（本人にだけ伝える）。占ったことは、周りからは分からない。
- * 占われた狐は、その場でずんだ餅に変わる。見ていた人には、誰も手をかざしていないのに餅に変わった、とだけ伝える。
+ * 占い師が占う。分かるのは、相手が人狼かどうかだけ（本人にだけ伝える）。占ったことは、周りからは分からない。
+ * 占われた妖狐は、その場でずんだ餅に変わる。見ていた人には、誰も杖をふっていないのに餅に変わった、とだけ伝える。
  */
-function divine(world: RoamWorld, actor: Actor, target: Actor): void {
+function divine(world: RoamWorld, actor: Actor, target: Actor, since: number): void {
   const targetName = nameOf(world, target.id);
   const room = areaAt(world.map, target.pos);
   const fairy = target.nibbler;
@@ -1025,14 +1026,14 @@ function divine(world: RoamWorld, actor: Actor, target: Actor): void {
       const watcher = actorById(world, id);
       if (!canSee(world, watcher, target)) continue;
       witnesses.push({ id });
-      watcher.events.push(`${room} で ${targetName} が急にずんだ餅に変わるのを見た（見えた範囲では、誰も手をかざしていなかった）`);
+      watcher.events.push(`${room} で ${targetName} が急にずんだ餅に変わるのを見た（見えた範囲では、誰も杖をふっていなかった）`);
     }
     for (const id of cameraWatchers(world)) {
       if (id === actor.id || id === target.id || witnesses.some((w) => w.id === id)) continue;
       const camera = camerasShowing(world, actorById(world, id), target.pos)[0];
       if (!camera) continue;
       witnesses.push({ id, camera: camera.name });
-      actorById(world, id).events.push(`防犯カメラ（${camera.name}）に、${targetName} が急にずんだ餅に変わるのが映った（映った範囲では、誰も手をかざしていなかった）`);
+      actorById(world, id).events.push(`防犯カメラ（${camera.name}）に、${targetName} が急にずんだ餅に変わるのが映った（映った範囲では、誰も杖をふっていなかった）`);
     }
     endLook(world, target, true);
     playerById(world, target.id).status = 'asleep';
@@ -1041,9 +1042,9 @@ function divine(world: RoamWorld, actor: Actor, target: Actor): void {
   }
   actor.divinedRound = world.round;
   const seer = playerById(world, actor.id);
-  seer.divined = [...(seer.divined ?? []), { name: targetName, round: world.round, fairy, ...(cursed ? { cursed: true } : {}) }];
+  seer.divined = [...(seer.divined ?? []), { name: targetName, round: world.round, fairy, ...(cursed ? { cursed: true } : {}), from: since, to: world.clock, room }];
   world.happenings.push({ type: 'divine', t: world.clock, id: actor.id, targetId: target.id, room, fairy, cursed, witnesses });
-  stop(actor, `${targetName} を占った: ${fairy ? '妖精だった' : '妖精ではなかった'}${cursed ? `。${targetName} は、その場でずんだ餅に変わった（狐だった）` : ''}`);
+  stop(actor, `${targetName} を占った: ${fairy ? '人狼だった' : '人狼ではなかった'}${cursed ? `。${targetName} は、その場でずんだ餅に変わった（妖狐だった）` : ''}`);
 }
 
 // ───────── 戸 ─────────
@@ -1402,8 +1403,8 @@ export function stepRoam(world: RoamWorld): void {
       }
       task.nearSince ??= clock;
       if (clock - task.nearSince < roam.divineSeconds - 1e-9) continue;
-      divine(world, actor, seen);
-      // 占われた狐が餅になって、人数が足りなくなることがある
+      divine(world, actor, seen, task.nearSince);
+      // 占われた妖狐が餅になって、人数が足りなくなることがある
       const over = decideWinner(world);
       if (over) return finish(world, over);
       continue;
@@ -1507,7 +1508,7 @@ export function endMeeting(world: RoamWorld): void {
   }
 
   // 全員に公開された内容だけで、経過を1行にまとめる（誰が誰に入れたかも、投票のあとで全員に明かされている）
-  // クビになった人については、妖精だったかどうかだけを公表する（妖精マニアかどうかは伝えない）
+  // クビになった人については、人狼だったかどうかだけを公表する（狂信者かどうかは伝えない）
   const asleep = meeting.absent.filter((a) => a.status === 'asleep').map((a) => nameOf(world, a.id));
   const ballotName = (ballot: Ballot) => (ballot === 'skip' ? 'スキップ' : nameOf(world, ballot));
   const tally = outcome.tally.map((row) => `${ballotName(row.target)} ${row.count}票`).join('、');
@@ -1569,7 +1570,7 @@ function applyIntent(world: RoamWorld, id: PlayerId, intent: { action: string; t
   const { action, target } = intent;
   const seen = (name: string) => visibleTo(world, id).find((other) => nameOf(world, other) === name);
   const nibblerOnly = action === 'transform' || action === 'transform_if_unseen' || action === 'sneak' || action === 'sabotage';
-  // 妖精でない人には、知らない行動と同じ断り方をする（占い師でない人の「占う」も同じ）
+  // 人狼でない人には、知らない行動と同じ断り方をする（占い師でない人の「占う」も同じ）
   if (nibblerOnly && !actor.nibbler) throw new RuleViolation('unknown_action', 'その行動はできません');
   if (action === 'divine' && !actor.seer) throw new RuleViolation('unknown_action', 'その行動はできません');
   if (actor.under) throw new RuleViolation('under', '抜け道の中では、ほかのことはできません');
@@ -1755,8 +1756,7 @@ export function buildRoamObservation(world: RoamWorld, id: PlayerId): RoamObserv
   const me = playerById(world, id);
   if (me.status !== 'awake') throw new Error('起きていない人の観測は作れません');
   const actor = actorById(world, id);
-  const allies =
-    me.role === 'nibbler' ? world.players.filter((p) => p.role === 'nibbler' && p.id !== id).map((p) => p.name) : [];
+  const allies = alliesOf(world, me.role, id);
   const { trouble } = world;
   const wait = (until: number) => Math.max(0, Math.ceil(until - world.clock));
   const hatchGroups = new Map<string, string[]>();

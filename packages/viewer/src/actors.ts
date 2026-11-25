@@ -38,14 +38,17 @@ export interface ActorLook {
   /** 持ち場で手を動かしている（体を小さくはずませて、両手を交互に動かす）。 */
   working?: boolean;
   /**
-   * 手をかざしている（side: かざす相手のいる側。k: 上げ具合 0〜1）。その側の手を、相手のほうへ高く上げて、手のひらを光らせる。
+   * 杖をふっている（side: 相手のいる側。k: ふり具合 0〜1。fall: ふり終えて、杖を下ろしているところ）。
+   * k の前半で、杖を頭の上へふり上げ、後半で相手のほうへふり下ろす。ふり下ろすと、杖の先の星がずんだ色に光る。
    */
-  reach?: { side: -1 | 1; k: number };
+  reach?: { side: -1 | 1; k: number; fall?: boolean };
   /** 心だけの姿（うすく、青白く、床から少し浮いている。影は無い）。 */
   dream?: boolean;
-  /** ずんだの妖精の羽（役職を見せている時だけ）。 */
+  /**
+   * 人狼の印（役職を見せている時だけ）。灰色の狼の耳としっぽ。識別子 wings は、前の絵（羽）のなごり。
+   */
   wings?: boolean;
-  /** 狐のしっぽ（役職を見せている時だけ）。 */
+  /** 妖狐のしっぽ（役職を見せている時だけ）。 */
   tail?: boolean;
   /** 占い師の玉（役職を見せている時だけ）。肩のうしろに、ふわふわ浮かぶ。 */
   orb?: boolean;
@@ -56,9 +59,103 @@ export interface ActorLook {
 }
 
 const R = 22; // 体の半径（scale 1 のとき）
-/** 手をかざした時に、手が体の横へ出る幅と、上がる高さ（体の半径に対する割合）。カットインの光の出どころ（cutin.ts）も、これに合わせる。 */
+/** 杖をふった時に、杖を持つ手が体の横へ出る幅と、上がる高さ（体の半径に対する割合）。 */
 export const REACH_OUT = 0.75;
 export const REACH_UP = 0.5;
+/** 杖の長さ（体の半径に対する割合）と、ふり上げた角度・ふり下ろした角度（真上が 0。相手の側へ倒すほど大きい）。 */
+const WAND_LEN = 1.25;
+const WAND_UP = -0.3;
+// ふり下ろした杖は、相手の体のほうへ少し下向き（カットインの決めぜりふの文字に、星が隠れないように）
+const WAND_DOWN = 1.65;
+
+/** 杖を持つ手の位置（体の真ん中から。scale 1 の時の大きさ）。 */
+function wandHand(side: -1 | 1, k: number, time: number, seed: number): { x: number; y: number } {
+  return { x: side * (R - 1 + k * R * REACH_OUT), y: R * 0.18 - k * R * REACH_UP + Math.sin(time * 14 + seed) * k * 0.8 };
+}
+
+/** 杖の角度。k が半分を過ぎてから、ばねのように相手のほうへふり下ろす。下ろしている時は、相手に向けたまま。 */
+function wandAngle(k: number, fall: boolean, time: number, seed: number): number {
+  const shake = Math.sin(time * 14 + seed) * 0.05 * k;
+  if (fall) return WAND_DOWN + shake;
+  const p = clamp01((k - 0.5) / 0.5);
+  const u = p - 1;
+  const swing = p <= 0 ? 0 : 1 + 2.70158 * u * u * u + 1.70158 * u * u;
+  return WAND_UP + (WAND_DOWN - WAND_UP) * swing + shake;
+}
+
+/**
+ * 杖の先（星）の位置。x・y・scale は drawActor に渡すのと同じ（足もとの位置と大きさ）。カットイン（cutin.ts）の光の出どころに使う。
+ * 体のはずみ（数ピクセル）は入れていない。
+ */
+export function wandTip(x: number, y: number, scale: number, reach: { side: -1 | 1; k: number; fall?: boolean }, time: number, seed: number): { x: number; y: number } {
+  const k = clamp01(reach.k);
+  const hand = wandHand(reach.side, k, time, seed);
+  const a = wandAngle(k, reach.fall ?? false, time, seed);
+  return { x: x + (hand.x + reach.side * Math.sin(a) * R * WAND_LEN) * scale, y: y + (-R * 0.98 + hand.y - Math.cos(a) * R * WAND_LEN) * scale };
+}
+
+/** 杖（木の棒の先に、ずんだ色の星）。手より先に描いて、手で握っているように見せる。 */
+function drawWand(ctx: Ctx, side: -1 | 1, k: number, fall: boolean, time: number, seed: number): void {
+  const hand = wandHand(side, k, time, seed);
+  const a = wandAngle(k, fall, time, seed);
+  const dx = side * Math.sin(a);
+  const dy = -Math.cos(a);
+  const tip = { x: hand.x + dx * R * WAND_LEN, y: hand.y + dy * R * WAND_LEN };
+  const end = { x: hand.x - dx * R * 0.25, y: hand.y - dy * R * 0.25 };
+  // 出す時と下ろす時は、杖をうすくする（ぱっと現れたり消えたりしないように）
+  const alpha = fall ? clamp01(k / 0.4) : clamp01(k / 0.15);
+  // ふり下ろしたあとの光（星のまわり）
+  const glow = fall ? 0 : clamp01((k - 0.8) / 0.2);
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  if (glow > 0) {
+    const r = 14 + glow * 6 + Math.sin(time * 11) * 1.5;
+    const halo = ctx.createRadialGradient(tip.x, tip.y, 2, tip.x, tip.y, r);
+    halo.addColorStop(0, `rgba(230, 250, 190, ${0.9 * glow})`);
+    halo.addColorStop(1, 'rgba(156, 204, 82, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 棒（ふちを濃く、中を木の色に）
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 5.6;
+  ctx.beginPath();
+  ctx.moveTo(end.x, end.y);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.stroke();
+  ctx.strokeStyle = '#b07a43';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // 先の星（ゆっくり回る）
+  const spin = time * 2.4 + seed;
+  const outer = 7.4 + glow * 1.4;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outer : outer * 0.46;
+    const t = spin + (i * Math.PI) / 5;
+    const px = tip.x + Math.cos(t) * r;
+    const py = tip.y + Math.sin(t) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = glow > 0 ? '#d9f29a' : ZUNDA;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  // ふり下ろした瞬間の、小さなきらめき
+  if (glow > 0) {
+    for (let i = 0; i < 3; i++) {
+      const t = time * 5 + i * 2.1 + seed;
+      sparkle(ctx, tip.x + Math.cos(t) * (12 + i * 3), tip.y + Math.sin(t * 1.3) * (10 + i * 2), 2.4 * glow, `rgba(255, 250, 210, ${0.95 * glow})`);
+    }
+  }
+  ctx.restore();
+}
 
 export function drawActor(ctx: Ctx, look: ActorLook): void {
   if (look.asleep) {
@@ -98,7 +195,7 @@ export function drawActor(ctx: Ctx, look: ActorLook): void {
   ctx.translate(0, -bob - hop);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  if (look.wings) drawWings(ctx, time, seed, facing);
+  if (look.wings) drawWolf(ctx, time, seed, facing);
   if (look.tail) drawTail(ctx, time, seed, facing);
   ctx.lineWidth = 2.6;
   ctx.strokeStyle = INK;
@@ -166,20 +263,13 @@ export function drawActor(ctx: Ctx, look: ActorLook): void {
   const reach = look.reach ? Math.max(0, Math.min(1, look.reach.k)) : 0;
   for (const side of [-1, 1]) {
     if (reach > 0 && look.reach && side === look.reach.side) {
-      // 手をかざす: 相手の側の手を、体の横から、相手のほうへ突き出す（肩の高さ）。出しきると、手のひらがずんだ色に光る
-      const hx = side * (R - 1 + reach * R * REACH_OUT);
-      const hy = R * 0.18 - reach * R * REACH_UP + Math.sin(time * 14 + seed) * reach * 0.8;
-      if (reach > 0.55) {
-        const glow = (reach - 0.55) / 0.45;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(hx + side * 2, hy - 1, 9 + glow * 5 + Math.sin(time * 11) * 1.2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(156, 204, 82, ${0.42 * glow})`;
-        ctx.fill();
-        ctx.restore();
-      }
+      // 杖をふる: 相手の側の手で杖を持ち、頭の上へふり上げてから、相手のほうへふり下ろす。杖を先に描き、握っている手をその上に重ねる
+      drawWand(ctx, side, reach, look.reach.fall ?? false, time, seed);
+      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = INK;
+      const hand = wandHand(side, reach, time, seed);
       ctx.beginPath();
-      ctx.ellipse(hx, hy, 5.2 + reach * 0.8, 6.2 + reach * 1.4, side * 0.2 * reach, 0, Math.PI * 2);
+      ctx.ellipse(hand.x, hand.y, 5.2 + reach * 0.8, 6.2 + reach * 1.4, side * 0.2 * reach, 0, Math.PI * 2);
       ctx.fillStyle = look.dream ? '#eef2ff' : MOCHI;
       ctx.fill();
       ctx.stroke();
@@ -418,9 +508,41 @@ function drawHeadwear(ctx: Ctx, style: number, color: CastColor, facing: number)
   ctx.restore();
 }
 
-/** ずんだの妖精の羽。体の後ろに、うすく透ける4枚の羽。ゆっくり羽ばたく。 */
-/** 狐のしっぽ。体のうしろ（向きと反対側）で、ゆらゆら揺れる。先は白い。 */
-function drawTail(ctx: Ctx, time: number, seed: number, facing: number): void {
+/** しっぽの色（妖狐は橙、人狼は灰色）。 */
+const FOX_TAIL = { fill: '#e8892e', tip: '#fff8ec', edge: '#5a3416' };
+const WOLF_TAIL = { fill: '#8d949e', tip: '#e9ecef', edge: '#343a40' };
+
+/** 人狼の印: 灰色のしっぽと、頭の上の狼の耳（体のうしろに描くので、頭の上に出た所だけ見える）。 */
+function drawWolf(ctx: Ctx, time: number, seed: number, facing: number): void {
+  drawTail(ctx, time, seed + 1.7, facing, WOLF_TAIL);
+  const twitch = Math.max(0, Math.sin(time * 2.3 + seed * 3)) ** 12 * 0.18;
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(side * R * 0.52, -R * 1.62);
+    ctx.rotate(side * (0.32 + (side === facing ? twitch : 0)));
+    const ear = new Path2D();
+    ear.moveTo(-R * 0.34, R * 0.12);
+    ear.quadraticCurveTo(-R * 0.22, -R * 0.55, 0, -R * 0.86);
+    ear.quadraticCurveTo(R * 0.22, -R * 0.55, R * 0.34, R * 0.12);
+    ear.closePath();
+    ctx.fillStyle = WOLF_TAIL.fill;
+    ctx.fill(ear);
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = WOLF_TAIL.edge;
+    ctx.stroke(ear);
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.17, R * 0.02);
+    ctx.quadraticCurveTo(-R * 0.1, -R * 0.4, 0, -R * 0.58);
+    ctx.quadraticCurveTo(R * 0.1, -R * 0.4, R * 0.17, R * 0.02);
+    ctx.closePath();
+    ctx.fillStyle = '#f3c6c6';
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** しっぽ（既定は妖狐の橙。人狼は灰色を渡す）。体のうしろ（向きと反対側）で、ゆらゆら揺れる。先は白い。 */
+function drawTail(ctx: Ctx, time: number, seed: number, facing: number, color = FOX_TAIL): void {
   const sway = Math.sin(time * 3.2 + seed) * 0.16;
   ctx.save();
   ctx.translate(-facing * R * 0.62, -R * 0.62);
@@ -432,50 +554,18 @@ function drawTail(ctx: Ctx, time: number, seed: number, facing: number): void {
   body.bezierCurveTo(R * 1.2, -R * 0.42, R * 0.9, -R * 0.62, R * 0.62, -R * 0.42);
   body.bezierCurveTo(R * 0.38, -R * 0.26, R * 0.12, -R * 0.2, 0, -R * 0.2);
   body.closePath();
-  ctx.fillStyle = '#e8892e';
+  ctx.fillStyle = color.fill;
   ctx.fill(body);
   ctx.save();
   ctx.clip(body);
   ctx.beginPath();
   ctx.ellipse(R * 1.32, -R * 0.42, R * 0.34, R * 0.3, -0.6, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff8ec';
+  ctx.fillStyle = color.tip;
   ctx.fill();
   ctx.restore();
   ctx.lineWidth = 2.2;
-  ctx.strokeStyle = '#5a3416';
+  ctx.strokeStyle = color.edge;
   ctx.stroke(body);
-  ctx.restore();
-}
-
-function drawWings(ctx: Ctx, time: number, seed: number, facing: number): void {
-  const flap = Math.sin(time * 7 + seed) * 0.14;
-  ctx.save();
-  ctx.translate(-facing * R * 0.25, -R * 1.15);
-  for (const side of [-1, 1]) {
-    for (const [lift, len, wide, tilt] of [[-0.18, 1.05, 0.5, -0.55], [0.32, 0.72, 0.36, 0.35]] as const) {
-      ctx.save();
-      ctx.scale(side, 1);
-      ctx.rotate(tilt - flap * (lift < 0 ? 1 : 0.6));
-      ctx.beginPath();
-      ctx.ellipse(R * (0.55 + len * 0.45), R * lift, R * len * 0.62, R * wide * 0.62, 0, 0, Math.PI * 2);
-      const g = ctx.createLinearGradient(R * 0.4, 0, R * (0.6 + len), 0);
-      g.addColorStop(0, 'rgba(214, 245, 196, 0.75)');
-      g.addColorStop(1, 'rgba(190, 228, 255, 0.35)');
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.lineWidth = 1.6;
-      ctx.strokeStyle = 'rgba(95, 143, 44, 0.85)';
-      ctx.stroke();
-      // 羽の筋
-      ctx.beginPath();
-      ctx.moveTo(R * 0.55, R * lift);
-      ctx.quadraticCurveTo(R * (0.7 + len * 0.3), R * (lift - wide * 0.15), R * (0.55 + len * 0.85), R * lift);
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(95, 143, 44, 0.5)';
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
   ctx.restore();
 }
 

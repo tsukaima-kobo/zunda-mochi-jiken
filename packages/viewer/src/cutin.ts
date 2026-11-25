@@ -1,10 +1,10 @@
-// 妖精が人をずんだ餅に変える直前の、見せ場の差し込み（カットイン）。役職を見せている時だけ出す。
-// 画面を暗くして、妖精の色の帯を斜めに走らせ、左に妖精、右にねらわれた人を大きく映して、決めぜりふを打ち出す。
-// 妖精の手から、ずんだの光がねらわれた人へ飛び、ぽんと煙が立って、ねらわれた人がずんだ餅に変わる（誰が誰を餅にしたかが、一目で分かる）。
-// 妖精2人が同じ瞬間に変えた時は、2組を上下に並べる。終わりに白く光らせ、光が引くと、ふだんの絵に戻る。
+// 人狼が人をずんだ餅に変える直前の、見せ場の差し込み（カットイン）。役職を見せている時だけ出す。
+// 画面を暗くして、人狼の色の帯を斜めに走らせ、左に人狼、右にねらわれた人を大きく映して、決めぜりふを打ち出す。
+// 人狼の杖の先から、ずんだの光がねらわれた人へ飛び、ぽんと煙が立って、ねらわれた人がずんだ餅に変わる（誰が誰を餅にしたかが、一目で分かる）。
+// 人狼2人が同じ瞬間に変えた時は、2組を上下に並べる。終わりに白く光らせ、光が引くと、ふだんの絵に戻る。
 
 import { mouthAt } from '../../speech/src/index.ts';
-import { drawActor, REACH_OUT, REACH_UP, sparkle } from './actors.ts';
+import { drawActor, sparkle, wandTip } from './actors.ts';
 import type { ActorLook } from './actors.ts';
 import type { Cutin } from './show.ts';
 import { CUTIN_VOICE_DELAY } from './sound.ts';
@@ -18,14 +18,14 @@ const BAND_H = 440;
 const SLANT = 0.16;
 const BODY_R = 22; // 登場人物の体の半径（scale 1 のとき。actors.ts と同じ）
 
-/** 差し込みに出す1人（妖精か、ねらわれた人）。 */
+/** 差し込みに出す1人（人狼か、ねらわれた人）。 */
 export interface CutinPerson {
   name: string;
   look: Pick<ActorLook, 'color' | 'style' | 'time' | 'seed' | 'character'>;
   brain: string | null;
 }
 
-/** 1組（餅にした妖精と、餅にされた人）。 */
+/** 1組（餅にした人狼と、餅にされた人）。 */
 export interface CutinPair {
   by: CutinPerson;
   target: CutinPerson;
@@ -91,7 +91,7 @@ function drawBand(ctx: Ctx, cut: Cutin, u: number, open: number, color: CastColo
   ctx.fillStyle = fill;
   ctx.fill();
   ctx.clip();
-  // 走る線（左から右へ。妖精からねらわれた人へ向かう向き）
+  // 走る線（左から右へ。人狼からねらわれた人へ向かう向き）
   for (let i = 0; i < 34; i++) {
     const y = cy - BAND_H / 2 + rand(i * 13.7 + cut.at) * BAND_H;
     const len = 160 + rand(i * 5.3) * 420;
@@ -133,12 +133,12 @@ interface PairLayout {
   fade: number;
 }
 
-/** 1組を描く: 左に妖精、右にねらわれた人、そのあいだを飛ぶずんだの光、名札。 */
+/** 1組を描く: 左に人狼、右にねらわれた人、そのあいだを飛ぶずんだの光、名札。 */
 function drawPair(ctx: Ctx, cut: Cutin, pair: CutinPair, u: number, length: number, morphAt: number, layout: PairLayout): void {
   const { scale, feet, double, row, fade } = layout;
   const body = BODY_R * scale;
   const delay = row * 0.06;
-  // 妖精は左から、ねらわれた人は右から入ってくる
+  // 人狼は左から、ねらわれた人は右から入ってくる
   const fx = layout.left - (1 - easeBack(clamp01((u - 0.04 - delay) / 0.28))) * (layout.left + 360) + u * 18;
   const vx = layout.right + (1 - easeOut(clamp01((u - 0.1 - delay) / 0.26))) * (W - layout.right + 360);
   const midY = feet - body * 0.95;
@@ -147,7 +147,7 @@ function drawPair(ctx: Ctx, cut: Cutin, pair: CutinPair, u: number, length: numb
 
   ctx.save();
   ctx.globalAlpha = fade;
-  // 妖精の後ろの光
+  // 人狼の後ろの光
   const glow = ctx.createRadialGradient(fx, midY, 10, fx, midY, body * 2.2);
   glow.addColorStop(0, 'rgba(214, 246, 160, 0.7)');
   glow.addColorStop(1, 'rgba(214, 246, 160, 0)');
@@ -155,15 +155,17 @@ function drawPair(ctx: Ctx, cut: Cutin, pair: CutinPair, u: number, length: numb
   ctx.fillRect(fx - body * 2.3, midY - body * 2.3, body * 4.6, body * 4.6);
   const local = u - CUTIN_VOICE_DELAY;
   const talk = row === 0 && cut.clip?.mouth && local >= 0 ? mouthAt(cut.clip.mouth, local) : local >= 0 && local < 1.1 ? 0.3 + 0.7 * Math.abs(Math.sin(local * 14 + row)) : 0;
-  // 手をかざす: 光が飛びはじめる前に、相手のほうへ手を突き出し、変わったあとに下ろす
-  const reach = morphed ? 1 - clamp01((u - morphAt) / 0.3) : easeOut(clamp01((u - 0.3) / 0.2));
-  drawActor(ctx, { ...pair.by.look, x: fx, y: feet, scale, facing: 1, mood: 'sly', wings: true, talk, shadow: false, ...(reach > 0 ? { reach: { side: 1 as const, k: reach } } : {}) });
+  // 杖をふる: 光が飛びはじめる前に、杖をふり上げてから相手のほうへふり下ろし、変わったあとに下ろす
+  const reach = morphed ? 1 - clamp01((u - morphAt) / 0.3) : clamp01((u - 0.12) / 0.38);
+  const wand = { side: 1 as const, k: reach, fall: morphed };
+  drawActor(ctx, { ...pair.by.look, x: fx, y: feet, scale, facing: 1, mood: 'sly', wings: true, talk, shadow: false, ...(reach > 0 ? { reach: wand } : {}) });
 
-  // ずんだの光（妖精の手もとから、ねらわれた人へ）
+  // ずんだの光（人狼の杖の先から、ねらわれた人へ）
   if (u > 0.5 && !morphed) {
-    // 光の出どころは、かざした手のひら
-    const hx = fx + body * (0.95 + REACH_OUT * reach);
-    const hy = feet - body * (0.8 + REACH_UP * reach);
+    // 光の出どころは、ふり下ろした杖の先の星
+    const tip = wandTip(fx, feet, scale, wand, pair.by.look.time, pair.by.look.seed);
+    const hx = tip.x;
+    const hy = tip.y;
     const tx = vx - body * 0.4;
     const ty = feet - body * 0.95;
     const grow = clamp01((u - 0.5) / 0.25);
@@ -201,14 +203,15 @@ function drawPair(ctx: Ctx, cut: Cutin, pair: CutinPair, u: number, length: numb
     }
   }
 
-  // 名札（妖精: 「ずんだの妖精」 / ねらわれた人: 「ねらわれた」→「ずんだ餅にされた」）
+  // 名札（人狼: 「人狼」 / ねらわれた人: 「ねらわれた」→「ずんだ餅にされた」）
   const tagIn = easeOut(clamp01((u - 0.12 - delay) / 0.2));
   ctx.globalAlpha = fade * tagIn;
   const size = double ? 26 : 32;
-  const culprit = { label: 'ずんだの妖精', labelColor: '#ffe27a', person: pair.by };
+  const culprit = { label: '人狼', labelColor: '#ffe27a', person: pair.by };
   const victim = { label: morphed ? 'ずんだ餅にされた' : 'ねらわれた', labelColor: '#ffffff', person: pair.target };
   if (double) {
-    nameTag(ctx, fx + body * 1.15, feet - body * 1.05, 'left', culprit.label, culprit.labelColor, culprit.person, size);
+    // 人狼の名札は、足もとの高さに（肩の高さだと、ふり下ろした杖に重なって杖が隠れる。2026-11-23 杖にした時に下げた）
+    nameTag(ctx, fx + body * 1.15, feet - body * 0.3, 'left', culprit.label, culprit.labelColor, culprit.person, size);
     nameTag(ctx, vx - body * 1.15, feet - body * 1.05, 'right', victim.label, victim.labelColor, victim.person, size);
   } else {
     nameTag(ctx, layout.left, feet + 62, 'center', culprit.label, culprit.labelColor, culprit.person, size);
@@ -217,7 +220,7 @@ function drawPair(ctx: Ctx, cut: Cutin, pair: CutinPair, u: number, length: numb
   ctx.restore();
 }
 
-/** 名札: 上に小さく役目（ずんだの妖精・ねらわれた）、その下に名前の札と頭脳の札。x は align の位置（左はし・真ん中・右はし）。 */
+/** 名札: 上に小さく役目（人狼・ねらわれた）、その下に名前の札と頭脳の札。x は align の位置（左はし・真ん中・右はし）。 */
 function nameTag(ctx: Ctx, x: number, y: number, align: 'left' | 'center' | 'right', label: string, labelColor: string, person: CutinPerson, size: number): void {
   setFont(ctx, size, 800);
   const pillW = ctx.measureText(person.name).width + size * 1.6;

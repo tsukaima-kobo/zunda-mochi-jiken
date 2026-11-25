@@ -25,7 +25,7 @@ export async function runMeeting(options: MeetingRunOptions): Promise<MatchLog> 
   const match = new Match(world, 'meeting', truth, options);
   try {
     const result = await conductMeeting(world, match, 1);
-    // この版では、妖精をクビにすれば従業員の勝ち
+    // この版では、人狼をクビにすれば従業員の勝ち
     match.log.outcome = { ...result, winner: result.ejectedRole === 'nibbler' ? 'artisan' : 'nibbler' };
   } catch (error) {
     if (!(error instanceof QuotaExhaustedError)) throw error;

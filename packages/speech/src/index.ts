@@ -8,7 +8,7 @@ export type { AccentPhrase, AudioQuery, Mora, Phrase, Segment } from './timing.t
 
 import type { Phrase } from './timing.ts';
 
-/** 妖精が人をずんだ餅に変える直前の、決めぜりふ（差し込みの間に、妖精の声で言う）。 */
+/** 人狼が人をずんだ餅に変える直前の、決めぜりふ（差し込みの間に、人狼の声で言う）。 */
 export const CUTIN_LINE = 'ずんだ餅に、なぁれ！';
 
 /** 発言に付けた音声。上映用の付け足しで、試合の記録そのものには入っていない。 */
@@ -17,7 +17,7 @@ export interface SpeechClip {
   speak: number;
   /**
    * 集会の発言でない音声: talk:<n>（朝礼・日記・感想会の n 番目）/ chat:<n>（見回りの間の声の n 番目）/
-   * cutin:<n>（n 番目に餅に変えた妖精の決めぜりふ）/ nar:<場面>:<n>（案内役の言葉）/ cue:<キー>（試合の場面の中の案内役の一言）。
+   * cutin:<n>（n 番目に餅に変えた人狼の決めぜりふ）/ nar:<場面>:<n>（案内役の言葉）/ cue:<キー>（試合の場面の中の案内役の一言）。
    * text が今の言葉と同じ時だけ使う（案内を書き直したら、古い音声は使わない）。
    */
   key?: string;

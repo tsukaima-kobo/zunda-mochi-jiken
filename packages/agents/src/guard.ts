@@ -22,8 +22,36 @@ export function privateDataProblems(text: string, denyList: readonly string[]): 
 
 export type Verdict =
   | { ok: true; intent: MeetingIntent }
-  /** trimmable: 長すぎること以外に問題がない発言。切れば使える。 */
-  | { ok: false; problems: string[]; trimmable: SpeakIntent | null };
+  /**
+   * trimmable: 長すぎること以外に問題がない発言。切れば使える。
+   * keep: 「明らかな悪手」の聞き直しだけが問題の、形としては正しい票（SOFT_PROBLEMS）。一度聞き直して、同じ答えなら、そのまま通す（台本の代わりに落とさない）。
+   */
+  | { ok: false; problems: string[]; trimmable: SpeakIntent | null; keep?: MeetingIntent };
+
+/**
+ * 手は指定しない（誰を疑うか・確率は AI 任せ）。気づかせる文で一度だけ聞き直し、同じ答えなら通す。本人の観測にある情報だけで決める。
+ */
+export const SOFT_PROBLEMS: ReadonlySet<string> = new Set(['last_chance_skip', 'known_wolf_other', 'madman_votes_wolf']);
+
+const CREW_ROLES = new Set(['artisan', 'seer']);
+/** 餅に変わるところを見た・防犯カメラに映った、という本人の見聞き（roam.ts の giveNapMochi の文）。誰がふったかが分かった時だけ。 */
+const SAW_NAP = /(\S+) が (\S+) に杖をふり、\2 がずんだ餅に変わるの(?:を見た|が映った)/;
+
+/**
+ * 従業員側の本人が、確かに知っている人狼（まだ出席している人）。本人の観測だけから: 今回の見回りで、人狼が餅に変えるところを見た人・占いで「人狼だった」と出た人。
+ * 杖は人狼しかふれない（妖狐には効かない・従業員は持たない）ので、見間違いはない。
+ */
+export function knownWolves(obs: MeetingObservation): string[] {
+  if (!CREW_ROLES.has(obs.self.role)) return [];
+  const names = new Set<string>();
+  for (const fact of obs.facts) {
+    const m = SAW_NAP.exec(fact);
+    // 防犯カメラの文は「…に、〇〇 が」と続くので、「、」より前は捨てる
+    if (m) names.add(((m[1] as string).split('、').at(-1) as string).trim());
+  }
+  if (obs.self.role === 'seer') for (const d of obs.self.divined ?? []) if (d.fairy) names.add(d.name);
+  return [...names].filter((name) => obs.options.includes(name));
+}
 
 /**
  * 疑い度をそろえる。候補にない名前・重なった名前は捨て、0〜5 の整数に丸める（聞き直しはしない。足りない人は答えなかった扱い）。
@@ -46,6 +74,8 @@ export function checkIntent(obs: MeetingObservation, json: unknown, denyList: re
     if (!parsed.success) return { ok: false, problems: ['shape'], trimmable: null };
     const intent = parsed.data;
     const problems = [
+      // 黙ってよいのは、集会の発言の番で mayPass がある時だけ（朝礼・日記・感想会と、集会の最初の発言は、ひとこと話す）
+      ...(intent.say.length === 0 && !obs.mayPass ? ['empty'] : []),
       ...privateDataProblems(`${intent.say}\n${intent.thought}`, denyList),
       ...(OUT_OF_CHARACTER.test(intent.say) ? ['out_of_character'] : []),
       ...(obs.options.includes(intent.suspect) ? [] : ['option']),
@@ -58,14 +88,29 @@ export function checkIntent(obs: MeetingObservation, json: unknown, denyList: re
   if (!parsed.success) return { ok: false, problems: ['shape'], trimmable: null };
   // 覚え書きは本人の記憶にしか残らないが、観戦者には見せるので、同じように検査する。長すぎる分は切る
   const intent = { ...parsed.data, memo: trimSay(parsed.data.memo, MEMO_MAX_CHARS), suspicion: normalizeSuspicion(parsed.data.suspicion, obs.options) };
-  const problems = [
-    ...privateDataProblems(`${intent.thought}\n${intent.memo}`, denyList),
-    ...(obs.options.includes(intent.vote) ? [] : ['option']),
-    // 最後の局面での従業員のスキップは、負けを選ぶのと同じ。一度だけ聞き直す（本人の役職と、全員に公開された人数だけで決まる）
-    ...(obs.stakes?.lastChance && obs.self.role === 'artisan' && intent.vote === SKIP_VOTE ? ['last_chance_skip'] : []),
-  ];
-  if (problems.length === 0) return { ok: true, intent: { kind: 'vote', ...intent } };
-  return { ok: false, problems, trimmable: null };
+  const hard = [...privateDataProblems(`${intent.thought}\n${intent.memo}`, denyList), ...(obs.options.includes(intent.vote) ? [] : ['option'])];
+  const soft = hard.length > 0 ? [] : blunderProblems(obs, intent.vote);
+  if (hard.length === 0 && soft.length === 0) return { ok: true, intent: { kind: 'vote', ...intent } };
+  return { ok: false, problems: [...hard, ...soft], trimmable: null, ...(hard.length === 0 ? { keep: { kind: 'vote' as const, ...intent } } : {}) };
+}
+
+/**
+ * 明らかな悪手（どの局面でも、本人の観測だけから、ほかの手より必ず損なもの）の票。止めるのは、確実なものだけ（迷う局面・判断が割れる局面は止めない）。
+ *  - last_chance_skip: 従業員側が、ここでスキップすると、完全な情報があっても、もう勝てない人数（stakes.skipFatal。全員に公開された人数だけで決まる）。
+ *  - known_wolf_other: 従業員側が、人狼だと確かに知っている相手（餅に変えるところを見た・占いで「人狼だった」）がいるのに、その人以外（スキップも）に入れる。
+ *    ただし、最後の人狼で、妖狐もまだ起きているかもしれない時は除く（最後の人狼を先にクビにすると、妖狐に横取りされる）。
+ *  - madman_votes_wolf: 狂信者が、自分の知っている人狼に入れる（人狼が勝てば自分も勝ち。人狼をクビにしても得がない）。
+ */
+function blunderProblems(obs: MeetingObservation, vote: string): string[] {
+  const out: string[] = [];
+  const crew = CREW_ROLES.has(obs.self.role);
+  if (crew && vote === SKIP_VOTE && obs.stakes?.skipFatal) out.push('last_chance_skip');
+  const known = knownWolves(obs);
+  const lastWolfWithFox = obs.stakes?.fairiesLeft === 1 && obs.stakes?.foxUp === true;
+  // 人数の読みが無い（stakes が無い）時は、最後の人狼かどうかが分からないので、止めない
+  if (known.length > 0 && obs.stakes && !lastWolfWithFox && !known.includes(vote)) out.push('known_wolf_other');
+  if (obs.self.role === 'madman' && obs.self.allies.includes(vote)) out.push('madman_votes_wolf');
+  return out;
 }
 
 /**
@@ -76,10 +121,20 @@ export function feedbackFor(problems: readonly string[], obs: MeetingObservation
   const parts: string[] = [];
   if (problems.includes('shape')) parts.push('指定された形の JSON だけを返してください。');
   if (problems.includes('too_long')) parts.push(`say は${obs.limits.sayTargetChars}字以内にしてください。`);
+  if (problems.includes('empty')) parts.push('say を空にせず、ひとこと話してください。');
   if (problems.includes('option')) parts.push(`候補は次のどれかです: ${obs.options.join(' / ')}`);
   if (problems.includes('out_of_character')) parts.push('ゲームの中の人物として話してください。');
+  // 明らかな悪手の聞き直し: 手は指定せず、本人の観測にある情報を伝えて、気づかせる
   if (problems.includes('last_chance_skip')) {
-    parts.push('いまスキップすると、次に1人がずんだ餅になった時点で妖精の勝ちです。確かな手がかりがなくても、出席者の中でいちばん怪しい人に入れてください。');
+    parts.push(
+      `いま出席しているのは${obs.stakes?.awake ?? obs.meeting.attendees.length}人で、人狼はまだ${obs.stakes?.fairiesLeft ?? '?'}人残っています${obs.stakes?.foxUp ? '（妖狐も、まだ起きているかもしれません）' : ''}。この人数でスキップすると、次の見回りで1人が餅になり、従業員はもう勝てなくなります。この選び方でよいですか。`,
+    );
+  }
+  if (problems.includes('known_wolf_other')) {
+    parts.push(`あなたは、${knownWolves(obs).join('、')}が人狼だと、確かに知っています（見聞きしたことと、占いの結果から）。この票の選び方でよいですか。`);
+  }
+  if (problems.includes('madman_votes_wolf')) {
+    parts.push(`${obs.self.allies.join('、')}は、あなたが知っている人狼です。人狼が勝てば、あなたも勝ちです。この票の選び方でよいですか。`);
   }
   if (problems.some((p) => p.startsWith('private:'))) {
     parts.push('ゲームの外のこと（メールアドレス、フォルダ名、機械の名前など）には触れないでください。');
@@ -107,7 +162,7 @@ export function checkRoamIntent(obs: RoamObservation, json: unknown, denyList: r
   const parsed = RoamIntent.safeParse(json);
   if (!parsed.success) return { ok: false, problems: ['shape'] };
   const intent = parsed.data;
-  // 本人に選べない行動（妖精でないのに、妖精だけの行動）は受け付けない
+  // 本人に選べない行動（人狼でないのに、人狼だけの行動）は受け付けない
   if (!roamActions(obs).includes(intent.action)) return { ok: false, problems: ['action'] };
   const awake = obs.visible.filter((v) => !v.asleep).map((v) => v.name);
   const asleep = obs.visible.filter((v) => v.asleep).map((v) => v.name);

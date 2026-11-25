@@ -1,4 +1,4 @@
-// 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）と、廊下の防犯カメラの絵。
+// 工房の道具（シフト表・ずんだ餅ボード・防犯カメラの画面）と、廊下の防犯カメラの絵。
 // 動かない部分は、工房の下絵（workshop.ts）に一度だけ描く。名札の色・画面の明かり・カメラの赤いランプは、毎コマ描く（scenes.ts）。
 // 絵はすべてコードで描く（外の素材は使わない）。座標は工房の絵のピクセル（tile は升目1つの大きさ）。
 
@@ -11,7 +11,7 @@ export type DeviceKind = 'admin' | 'vitals' | 'cameras';
 /** 壁の道具の大きさ（升）。名札を置く場所を、ほかの壁の飾りと重ねないために使う。 */
 export const DEVICE_WIDTH: Record<DeviceKind, number> = { admin: 2.2, vitals: 2.4, cameras: 2 };
 
-/** 名札かけの名札の並び（横の数）。 */
+/** ずんだ餅ボードの名札の並び（横の数）。 */
 const TAG_COLUMNS = 6;
 
 function ink(ctx: Ctx, width: number, color = WOOD_DARK): void {
@@ -120,7 +120,7 @@ export function screenRects(cx: number, base: number, tile: number): { x: number
   return [0, 1, 2, 3].map((i) => ({ x: r.x + pad + (i % 2) * (sw + gap), y: r.y + pad + Math.floor(i / 2) * (sh + gap), w: sw, h: sh }));
 }
 
-/** 名札かけの名札の位置（名簿順。6つずつ2段）。 */
+/** ずんだ餅ボードの名札の位置（名簿順。6つずつ2段）。 */
 export function tagRects(cx: number, base: number, tile: number, count: number): { x: number; y: number; w: number; h: number }[] {
   const u = tile / 64;
   const r = boardRect('vitals', cx, base, tile);
@@ -136,7 +136,7 @@ export function tagRects(cx: number, base: number, tile: number, count: number):
   }));
 }
 
-/** 名札かけの名札（毎コマ）。起きている人は、その人の色。ずんだ餅になった人は、裏返して緑の餅の印。クビの人は札が無い。 */
+/** ずんだ餅ボードの名札（毎コマ）。起きている人は、その人の色。ずんだ餅になった人は、裏返して緑の餅の印。クビの人は札が無い。 */
 export function drawNameTags(ctx: Ctx, cx: number, base: number, tile: number, tags: readonly { color: string; dark: string; state: 'awake' | 'asleep' | 'gone' }[]): void {
   const u = tile / 64;
   tagRects(cx, base, tile, tags.length).forEach((t, i) => {

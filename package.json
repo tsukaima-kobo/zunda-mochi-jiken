@@ -2,7 +2,7 @@
   "name": "zunda-mochi-jiken",
   "version": "0.1.0",
   "private": true,
-  "description": "ずんだ餅工房のもちもち事件 — 11人が工房で働きながら、まぎれこんだ「ずんだの妖精」を探す正体隠しゲーム（ボット版・ブラウザで動く）",
+  "description": "ずんだ餅工房のもちもち事件 — 11人が工房で働きながら、まぎれこんだ「人狼」を探す正体隠しゲーム（ボット版・ブラウザで動く）",
   "license": "MIT",
   "type": "module",
   "engines": {

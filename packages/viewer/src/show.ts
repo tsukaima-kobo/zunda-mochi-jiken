@@ -118,7 +118,7 @@ export interface SneakSpan {
 }
 
 /**
- * 工房の道具（見取り図の盤・名札かけ・防犯カメラの画面）を見ていた間。
+ * 工房の道具（シフト表・ずんだ餅ボード・防犯カメラの画面）を見ていた間。
  * 見えたもの（counts・tags・seen）は、見終わった時の記録から入る（途中でやめた時は、防犯カメラの seen だけ）。
  */
 export interface LookSpan {
@@ -133,14 +133,14 @@ export interface LookSpan {
   seen?: { camera: string; names: string[] }[];
 }
 
-/** 妖精が人をずんだ餅に変える直前の、見せ場の差し込み（役職を見せている時だけ出す）。 */
+/** 人狼が人をずんだ餅に変える直前の、見せ場の差し込み（役職を見せている時だけ出す）。 */
 export interface Cutin {
   at: number;
   /** 差し込みが終わる時刻（このすぐあとに、餅に変わる）。 */
   end: number;
-  /** 餅にした妖精と、餅にされた人。妖精2人が同じ瞬間に変えた時は、2組になる（1つの差し込みに並べる）。 */
+  /** 餅にした人狼と、餅にされた人。人狼2人が同じ瞬間に変えた時は、2組になる（1つの差し込みに並べる）。 */
   pairs: { by: string; target: string }[];
-  /** 妖精の決めぜりふの音声（あれば。2組の時は、先の妖精の声）。 */
+  /** 人狼の決めぜりふの音声（あれば。2組の時は、先の人狼の声）。 */
   clip?: SpeechClip;
 }
 
@@ -188,7 +188,7 @@ const VOTE_REVEAL_SECONDS = 2.0;
 const RESULT_SECONDS = 3.2;
 /**
  * クビの場面の時刻（結果が出てからの秒）。stamp: はんこ「クビ」（音も鳴らす） / walk: 風呂敷を背負って出ていく（walkSeconds かけて） /
- * verdict: 妖精だったかどうかの札 / note: 観戦者にだけ、本当の役職。seconds は場面の短いほうの長さ（案内役の一言が長ければ、それに合わせて伸びる）。
+ * verdict: 人狼だったかどうかの札 / note: 観戦者にだけ、本当の役職。seconds は場面の短いほうの長さ（案内役の一言が長ければ、それに合わせて伸びる）。
  */
 export const FIRED = { stamp: 0.3, walk: 0.8, walkSeconds: 1.3, verdict: 1.0, note: 1.35, seconds: 2.2 } as const;
 const ENDING_SECONDS = 12;
@@ -316,7 +316,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
    * 次の声を言った瞬間が、前の声の終わりに来るようにする。遅くしても間に合わない声は、試合の中の時間で CHAT_WAIT_MAX 秒まで待たせ、
    * それより待つ声は、ふきだしだけにする。引きのばすのは、聞いている人がいる声（雑談）と案内役の一言だけ。ひとりごとは、そのままの速さで入る時だけ鳴らす。
    * 同じ瞬間に何人も話した時は、いま聞こえた声への返事（声が聞こえ合っている人どうし・名前を呼び合っている声）を先に流す（会話としてつながるように）。
-   * 餅に変わる瞬間の前には、妖精の見せ場（差し込み）が入るので、鳴っている声が言い終わるまで、絵をゆっくりにして待つ。
+   * 餅に変わる瞬間の前には、人狼の見せ場（差し込み）が入るので、鳴っている声が言い終わるまで、絵をゆっくりにして待つ。
    * 返すのは、試合の中の秒と上映の秒の対応（見回りの始まりからの秒を、交互に並べたもの）。
    */
   const scheduleRoam = (round: RoamSegment): number[] => {
@@ -421,7 +421,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
       if (item.chat && !kept && spots.some((spot) => spot <= knotLin + (start - knotShow) + 1e-6)) return false;
       if (!kept && late > (item.callout ? CALLOUT_DELAY_MAX : stretch ? (friendReply(item) ? FRIEND_WAIT_MAX : CHAT_WAIT_MAX) : CHAT_DELAY_MAX) + 1e-9) return false;
       // 次の見せ場が始まるまでに言い終われない声は出さない（見せ場の決めぜりふと重ねない）。
-      // 残すと決めた声（妖精が、ねらった相手に声をかける所など）は、見せ場のほうを待たせる。見せ場のあとになってしまう時だけ出さない
+      // 残すと決めた声（人狼が、ねらった相手に声をかける所など）は、見せ場のほうを待たせる。見せ場のあとになってしまう時だけ出さない
       if (keptChat && nextNap && nextNap.lin < knotLin) return false;
       if (!keptChat && nextNap && (nextNap.lin < knotLin || start + item.length + CUTIN_SECONDS + 0.05 > knotShow + (nextNap.lin - knotLin) / SLOW_SPEED)) return false;
       knot(knotLin, knotShow);
@@ -744,7 +744,7 @@ export function buildShow(log: MatchLog, speech: SpeechTimeline | null): Show {
   if (total > 0 && (progress.length === 0 || (progress[0] as ProgressPoint).at > 0)) progress.unshift({ at: 0, done: 0, total, bump: false });
 
   // 餅に変える直前の差し込み。同じ見回りの中で、前の差し込みと重なるものは出さない。
-  // 妖精2人が同じ瞬間に変えた時は、1つの差し込みに2組を並べる（誰が誰を餅にしたかを、どちらも見せる）
+  // 人狼2人が同じ瞬間に変えた時は、1つの差し込みに2組を並べる（誰が誰を餅にしたかを、どちらも見せる）
   const cutins: Cutin[] = [];
   cues
     .filter((cue) => cue.event.type === 'nap')

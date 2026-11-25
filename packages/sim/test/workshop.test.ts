@@ -126,7 +126,7 @@ describe('広いマップでの試合', () => {
   });
 });
 
-describe('工房の道具（見取り図の盤・名札かけ・防犯カメラ）', () => {
+describe('工房の道具（シフト表・ずんだ餅ボード・防犯カメラ）', () => {
   const setup = (seed = 3) => {
     const w = createRoamWorld({ seed, map: mapDef, players: 6 });
     const put = (id: string, tile: Point) => {
@@ -159,21 +159,21 @@ describe('工房の道具（見取り図の盤・名札かけ・防犯カメラ�
     const { w } = setup();
     const obs = buildRoamObservation(w, w.roster[0] as string);
     expect(obs.devices).toEqual([
-      { kind: 'admin', name: '見取り図の盤', room: '帳場' },
-      { kind: 'vitals', name: '名札かけ', room: '休憩室' },
+      { kind: 'admin', name: 'シフト表', room: '帳場' },
+      { kind: 'vitals', name: 'ずんだ餅ボード', room: '休憩室' },
       { kind: 'cameras', name: '防犯カメラの画面', room: '機械室' },
     ]);
     expect(obs.cameraView).toBeNull();
   });
 
-  it('見取り図の盤: 部屋ごとの人数が分かる。誰なのかは出ない', () => {
+  it('シフト表: 部屋ごとの人数が分かる。誰なのかは出ない', () => {
     const { w, put, runUntilIdle, name } = setup();
     const [looker, loner] = w.roster as [string, string];
     put(loner, ice);
-    applyRoamIntent(w, looker, { action: 'check', target: '見取り図の盤' });
+    applyRoamIntent(w, looker, { action: 'check', target: 'シフト表' });
     runUntilIdle(looker);
     const reading = buildRoamObservation(w, looker).lastResult ?? '';
-    expect(reading).toContain('「見取り図の盤」を見た');
+    expect(reading).toContain('「シフト表」を見た');
     expect(reading).toContain('氷室 1人');
     expect(reading).toContain('帳場 1人');
     expect(reading).toContain('中庭 4人');
@@ -182,11 +182,11 @@ describe('工房の道具（見取り図の盤・名札かけ・防犯カメラ�
     expect(end).toMatchObject({ id: looker, device: 'admin', counts: { 氷室: 1, 帳場: 1, 中庭: 4 } });
   });
 
-  it('名札かけ: ずんだ餅になった人が分かる', () => {
+  it('ずんだ餅ボード: ずんだ餅になった人が分かる', () => {
     const { w, runUntilIdle, name } = setup();
     const [looker, mochi] = w.roster as [string, string];
     playerById(w, mochi).status = 'asleep';
-    applyRoamIntent(w, looker, { action: 'check', target: '名札かけ' });
+    applyRoamIntent(w, looker, { action: 'check', target: 'ずんだ餅ボード' });
     runUntilIdle(looker);
     expect(buildRoamObservation(w, looker).lastResult).toContain(`ずんだ餅になっている: ${name(mochi)}`);
   });

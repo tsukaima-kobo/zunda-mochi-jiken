@@ -1,7 +1,7 @@
 # ずんだ餅工房のもちもち事件
 
-開店前のずんだ餅工房。11人の丸いずんだ餅の従業員にまぎれて、人をずんだ餅に変えてしまう「ずんだの妖精」がひそんでいます。
-働きながら手がかりを集め、集会で話し合い、投票で妖精を見つけ出す、人狼ゲームです。
+開店前のずんだ餅工房。11人の丸いずんだ餅の従業員にまぎれて、杖をふって人をずんだ餅に変えてしまう「人狼」がひそんでいます。
+働きながら手がかりを集め、集会で話し合い、投票で人狼を見つけ出す、人狼ゲームです。
 Among Us をモチーフにして作りました（Innersloth とは関係ありません）。
 
 このリポジトリの版では、11人ともボット（台本どおりに動くプログラム）が遊びます。あなたは観戦するだけです。
@@ -19,44 +19,44 @@ Among Us をモチーフにして作りました（Innersloth とは関係あり
 
 | 役わり | 人数（11人の時） | 勝ち方 |
 |---|---|---|
-| 従業員 | 6人 | 仕込みをぜんぶ終える。または、妖精を全員クビにする |
+| 従業員 | 6人 | 仕込みをぜんぶ終える。または、人狼を全員クビにする |
 | 占い師（従業員側） | 1人 | 従業員と同じ |
-| ずんだの妖精 | 2人 | 起きている人間を、妖精と同じ数まで減らす。または、かまどの焚きすぎを直させない |
-| 妖精マニア（妖精側の人間） | 1人 | 妖精と同じ |
-| 狐（ひとりだけの陣営） | 1人 | 自分の仕込みを7工程終えて、試合が終わった時に起きていれば、どちらが勝っても勝ちを横取りする |
+| 人狼 | 2人 | 起きている人間を、人狼と同じ数まで減らす。または、かまどの焚きすぎを直させない |
+| 狂信者（人狼側の人間） | 1人 | 人狼と同じ |
+| 妖狐（ひとりだけの陣営） | 1人 | 試合が終わった時に起きていれば、どちらが勝っても勝ちを横取りする |
 
-- 妖精どうしは、互いが誰かを知っています。ほかの人は、誰の役わりも知りません。
-- **占い師**は、見回り1回につき1人、相手のそばに10秒いつづけると、妖精かどうかが自分にだけ分かります。途中で離れると、はじめからです。
-- **妖精マニア**は、誰が妖精かを知らず、妖精も妖精マニアを知りません。手をかざす力も妨害もありません。
-- **狐**には、妖精の手が効きません。でも、占われると、その場でずんだ餅になります。
-- 狐・占い師・妖精マニアは、9人以上の時に1人ずつ入ります。URL に `?foxes=0&seers=0&madmen=0` を付けると、妖精と従業員だけの試合になります。
+- 人狼どうしは、互いが誰かを知っています。狂信者は、誰が人狼かを知っています（人狼は、誰が狂信者かを知りません）。ほかの人は、誰の役わりも知りません。
+- **占い師**は、見回り1回につき1人、相手のそばに10秒いつづけると、人狼かどうかが自分にだけ分かります。途中で離れると、はじめからです。
+- **狂信者**は、人狼の味方をする人間です。杖をふる力も妨害もありません。
+- **妖狐**には、人狼の杖が効きません。でも、占われると、その場でずんだ餅になります。
+- 妖狐・占い師・狂信者は、9人以上の時に1人ずつ入ります。URL に `?foxes=0&seers=0&madmen=0` を付けると、人狼と従業員だけの試合になります。
 
 ### 見回り
 
 - 従業員は工房の持ち場をまわって、仕込み（餅つき・ずんだあんづくりなどの餅づくり、機械の修理、のれんを出すなどの開店の支度）を進めます。仕込みは3つずつ見えていて、1つ終えると次が出ます。持ち場は人ごとにちがいます。画面の上の帯が、工房全体の進み具合です。
-- 妖精は、すぐそばの人に手をかざして、ずんだ餅に変えます（一度変えると、しばらく次は変えられません）。
+- 人狼は、すぐそばの人に杖をふって、ずんだ餅に変えます（一度変えると、しばらく次は変えられません）。
 - ずんだ餅になった人は、心だけになって、こっそり仕込みを続けます。話したり投票したりはできません。
-- 妖精は、床下の抜け道を通って、離れた部屋へすばやく移れます。
-- 妖精の妨害:
+- 人狼は、床下の抜け道を通って、離れた部屋へすばやく移れます。
+- 人狼の妨害:
   - **あかりを消す** … 従業員は、すぐ近くしか見えなくなります。道具部屋のブレーカーを上げると戻ります。
-  - **かまどを焚きすぎにする** … 決まった時間のうちに、2か所に同時に人がついて直さないと、妖精の勝ちになります。
+  - **かまどを焚きすぎにする** … 決まった時間のうちに、2か所に同時に人がついて直さないと、人狼の勝ちになります。
   - **戸を閉める** … ある部屋の戸を、しばらく閉めます。
 - 工房には、誰でも使える道具が3つあります。
-  - **見取り図の盤**（帳場）… 部屋ごとの、いまの人数がわかります。誰なのかは出ません。廊下にいる人も出ません。
-  - **名札かけ**（休憩室）… 誰がずんだ餅になったかがわかります。
+  - **シフト表**（帳場）… 部屋ごとの、いまの人数がわかります。誰なのかは出ません。廊下にいる人も出ません。
+  - **ずんだ餅ボード**（休憩室）… 誰がずんだ餅になったかがわかります。
   - **防犯カメラの画面**（機械室）… 4本の廊下のカメラの映像を、しばらく見張れます。見ている間は、廊下のカメラの赤いランプがつくので、見張られていることがまわりにも分かります。
 
 ### 集会と投票
 
 - ずんだ餅を見つけた人が、すぐそばまで行って知らせるか、中庭の鐘が鳴らされると、全員が集まって集会が始まります。
-- 見たこと・聞いたことを順に話し、全員で投票します（投票しない「スキップ」もできます）。いちばん票を集めた人はクビになります。ただし、2票に届かない時・いちばんが同じ票数で並んだ時・スキップの票のほうが多い時は、誰もクビになりません。
-- 誰が誰に入れたかは、開票で全員に分かります。クビになった人が妖精だったかどうかは全員に知らされ、狐なら「狐だった」と分かります。
+- 見たこと・聞いたことを順に話し（話すことがなければ、黙っていてもかまいません。ただし、最初に話す人は黙れません）、全員で投票します（投票しない「スキップ」もできます）。いちばん票を集めた人はクビになります。ただし、2票に届かない時・いちばんが同じ票数で並んだ時・スキップの票のほうが多い時は、誰もクビになりません。
+- 誰が誰に入れたかは、開票で全員に分かります。クビになった人が人狼だったかどうかは全員に知らされ、妖狐なら「妖狐だった」と分かります。
 - それぞれが知っているのは、自分で見たこと・聞いたことだけです。
 
 ## 画面と操作
 
 - 右の名札の列は、全員の役わりと、いま何をしようとしているか（観戦者だけに見えます）。下の字幕は、近くの人どうしの会話です。
-- 「役職と内心」を外すと、登場人物と同じく、誰が妖精か分からないまま観られます。
+- 「役職と内心」を外すと、登場人物と同じく、誰が人狼か分からないまま観られます。
 - 同じ「種」なら、何度でも同じ試合になります。URL の `?seed=` で共有できます。
 
 | キー | はたらき |
@@ -71,9 +71,9 @@ Among Us をモチーフにして作りました（Innersloth とは関係あり
 |---|---|
 | `?seed=7` | 試合の種 |
 | `?players=8` | 人数（5〜12。既定は11） |
-| `?foxes=0` | 狐を入れない（既定は、9人以上なら1人） |
+| `?foxes=0` | 妖狐を入れない（既定は、9人以上なら1人） |
 | `?seers=0` | 占い師を入れない（既定は、9人以上なら1人） |
-| `?madmen=0` | 妖精マニアを入れない（既定は、9人以上なら1人） |
+| `?madmen=0` | 狂信者を入れない（既定は、9人以上なら1人） |
 | `?secrets=0` | 役職と内心を隠して始める |
 | `?speed=2` | 速さ |
 | `?sfx=0` | 音を出さない |
@@ -118,8 +118,8 @@ MIT License（[LICENSE](LICENSE)）。登場人物・絵・効果音もすべて
 
 # Zunda Mochi Workshop Mystery
 
-It's early morning at a zunda mochi workshop, before the shop opens. Hidden among the 11 round mochi workers are "zunda fairies", who turn people into zunda mochi.
-The workers do their jobs, gather clues, talk it over at meetings, and vote to find the fairies. It is a social deduction game in the spirit of Werewolf.
+It's early morning at a zunda mochi workshop, before the shop opens. Hidden among the 11 round mochi workers are werewolves, who wave a wand to turn people into zunda mochi.
+The workers do their jobs, gather clues, talk it over at meetings, and vote to find the werewolves. It is a social deduction game in the spirit of Werewolf.
 It is inspired by Among Us, and is not affiliated with Innersloth.
 
 In this version, all 11 players are bots (programs that follow a script). You only watch.
@@ -139,44 +139,44 @@ The game text is in Japanese.
 
 | Role | Count (11 players) | How to win |
 |---|---|---|
-| Worker | 6 | Finish all the prep tasks, or fire every fairy |
+| Worker | 6 | Finish all the prep tasks, or fire every werewolf |
 | Seer (workers' side) | 1 | Same as the workers |
-| Zunda fairy | 2 | Bring the number of awake humans down to the number of fairies, or keep the oven from being fixed in time |
-| Fairy fan (a human on the fairies' side) | 1 | Same as the fairies |
-| Fox (a side of its own) | 1 | Finish 7 of its own task steps and still be awake when the match ends; then it steals the win from whichever side won |
+| Werewolf | 2 | Bring the number of awake humans down to the number of werewolves, or keep the oven from being fixed in time |
+| Fanatic (a human on the werewolves' side) | 1 | Same as the werewolves |
+| Fox (a side of its own) | 1 | Still be awake when the match ends; then it steals the win from whichever side won |
 
-- The fairies know each other. Nobody else knows anyone's role.
-- The **seer** can check one person per roaming round by staying next to them for 10 seconds; only the seer learns whether that person is a fairy. Moving away starts the count over.
-- The **fairy fan** does not know who the fairies are, and the fairies do not know the fan. The fan cannot turn people into mochi or sabotage.
-- A fairy's hand has no effect on the **fox**, but the fox turns into mochi on the spot if the seer checks it.
-- The fox, the seer and the fairy fan each join when there are 9 or more players. Add `?foxes=0&seers=0&madmen=0` to the URL for a match with only fairies and workers.
+- The werewolves know each other. The fanatic knows who the werewolves are (the werewolves do not know who the fanatic is). Nobody else knows anyone's role.
+- The **seer** can check one person per roaming round by staying next to them for 10 seconds; only the seer learns whether that person is a werewolf. Moving away starts the count over.
+- The **fanatic** is a human who sides with the werewolves. The fanatic cannot turn people into mochi or sabotage.
+- A werewolf's wand has no effect on the **fox**, but the fox turns into mochi on the spot if the seer checks it.
+- The fox, the seer and the fanatic each join when there are 9 or more players. Add `?foxes=0&seers=0&madmen=0` to the URL for a match with only werewolves and workers.
 
 ### Roaming
 
 - Workers move between stations in the workshop to do prep tasks (making mochi such as pounding rice cakes and making zunda bean paste, repairing machines, and getting the shop ready such as hanging the shop curtain). Each worker sees three tasks at a time; finishing one reveals the next. Stations differ from person to person. The bar at the top shows the workshop's overall progress.
-- A fairy can hold out a hand to someone right next to it and turn them into zunda mochi (then it must wait a while before doing it again).
+- A werewolf can wave a wand at someone right next to it and turn them into zunda mochi (then it must wait a while before doing it again).
 - People who become mochi keep working quietly as spirits. They can no longer talk or vote.
-- Fairies can travel quickly to distant rooms through passages under the floor.
-- Fairy sabotage:
+- Werewolves can travel quickly to distant rooms through passages under the floor.
+- Werewolf sabotage:
   - **Lights out**: workers can only see what is close to them. Flipping the breaker in the tool room restores the lights.
-  - **Overheated oven**: two spots must be manned at the same time within a time limit, or the fairies win.
+  - **Overheated oven**: two spots must be manned at the same time within a time limit, or the werewolves win.
   - **Shut a door**: a room's door stays closed for a while.
 - Three devices in the workshop can be used by anyone:
-  - **Floor-plan board** (front office): shows how many people are in each room right now. It does not show who they are, and people in the hallways are not counted.
-  - **Name-tag rack** (break room): shows who has been turned into mochi.
+  - **Shift schedule** (front office): shows how many people are in each room right now. It does not show who they are, and people in the hallways are not counted.
+  - **Zunda mochi board** (break room): shows who has been turned into mochi.
   - **Security monitor** (machine room): lets you watch the cameras in the four hallways for a while. While someone is watching, the red lamps on the hallway cameras light up, so people nearby can tell they are being watched.
 
 ### Meetings and votes
 
 - When someone walks right up to a mochi they found and reports it, or rings the bell in the courtyard, everyone gathers for a meeting.
-- Players take turns saying what they saw and heard, then everyone votes (or skips). The player with the most votes is fired, except that nobody is fired when the top count is under 2 votes, when there is a tie for the top, or when skips are at least as many as the top count.
-- Who voted for whom is shown to everyone when the votes are opened. Everyone is told whether a fired player was a fairy, and a fired fox is revealed as a fox.
+- Players take turns saying what they saw and heard (a player with nothing to say may stay silent, except the first speaker), then everyone votes (or skips). The player with the most votes is fired, except that nobody is fired when the top count is under 2 votes, when there is a tie for the top, or when skips are at least as many as the top count.
+- Who voted for whom is shown to everyone when the votes are opened. Everyone is told whether a fired player was a werewolf, and a fired fox is revealed as a fox.
 - Each player only knows what they personally saw and heard.
 
 ## Screen and controls
 
 - The name tags on the right show everyone's role and what they are about to do (visible only to you, the viewer). The captions at the bottom are conversations between nearby players.
-- Untick "役職と内心" (roles and thoughts) to watch without knowing who the fairies are, just like the players.
+- Untick "役職と内心" (roles and thoughts) to watch without knowing who the werewolves are, just like the players.
 - The same "seed" (種) always produces the same match. Share one with `?seed=` in the URL.
 
 | Key | Action |
@@ -193,7 +193,7 @@ The game text is in Japanese.
 | `?players=8` | Number of players (5–12, default 11) |
 | `?foxes=0` | No fox (default: 1 with 9 or more players) |
 | `?seers=0` | No seer (default: 1 with 9 or more players) |
-| `?madmen=0` | No fairy fan (default: 1 with 9 or more players) |
+| `?madmen=0` | No fanatic (default: 1 with 9 or more players) |
 | `?secrets=0` | Start with roles and thoughts hidden |
 | `?speed=2` | Playback speed |
 | `?sfx=0` | Mute sound |
